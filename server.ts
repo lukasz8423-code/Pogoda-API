@@ -1014,7 +1014,7 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         temp: imgwData.temp,
         humidity: imgwData.humidity ?? null,
         wind: imgwData.windSpeed ?? null,
-        pressure: imgwData.pressure ?? (weatherData.current?.pressure_msl ? Math.round(weatherData.current.pressure_msl) : null),
+        pressure: imgwData.pressure ?? null,
         stationName: imgwData.stationName,
         distanceKm: imgwData.distanceKm,
         measurementTime: imgwData.measurementTime,
@@ -1308,15 +1308,15 @@ app.get("/api/stations", async (req, res) => {
           lat: realMeteo.lat,
           lng: realMeteo.lng,
           temp: realMeteo.temp,
-          humidity: realMeteo.humidity ?? baseHumidity,
-          windSpeed: realMeteo.windSpeed ?? (baseWind !== null ? Math.round(baseWind) : null),
-          pressure: basePressure !== null ? Math.round(basePressure) : null,
+          humidity: realMeteo.humidity,
+          windSpeed: realMeteo.windSpeed,
+          pressure: realMeteo.pressure ?? null,
           status: "Online - Telemetria IMGW-PIB",
           distanceKm: realMeteo.distanceKm,
-          soilTemp: realMeteo.groundTemp ?? soilTemp,
+          soilTemp: realMeteo.groundTemp,
           groundTemp: realMeteo.groundTemp ?? realMeteo.temp,
-          soilMoisture: soilMoisture,
-          solarRadiation: solarRadiation,
+          soilMoisture: null,
+          solarRadiation: null,
           rainRate: realMeteo.rainRate,
           lastPacket: realMeteo.measurementTime,
           isOfficial: true
@@ -1330,15 +1330,15 @@ app.get("/api/stations", async (req, res) => {
           lat: realSynop.lat,
           lng: realSynop.lng,
           temp: realSynop.temp,
-          humidity: realSynop.humidity ?? baseHumidity,
-          windSpeed: realSynop.windSpeed ?? (baseWind !== null ? Math.round(baseWind) : null),
-          pressure: realSynop.pressure ?? (basePressure !== null ? Math.round(basePressure) : null),
+          humidity: realSynop.humidity,
+          windSpeed: realSynop.windSpeed,
+          pressure: realSynop.pressure,
           status: "Online - Pomiary IMGW-PIB",
           distanceKm: realSynop.distanceKm,
-          soilTemp: soilTemp,
+          soilTemp: null,
           groundTemp: realSynop.temp,
-          soilMoisture: soilMoisture,
-          solarRadiation: solarRadiation,
+          soilMoisture: null,
+          solarRadiation: null,
           rainRate: realSynop.rainRate,
           lastPacket: realSynop.measurementTime,
           isOfficial: true
@@ -1371,10 +1371,10 @@ async function callGeminiWithFallback(prompt: string, responseMimeType: string =
 // Auxiliary function: generate highly detailed local weather recommendations if Gemini API is unavailable/fails
 function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: string) {
   const satMoisture = typeof current?.soil_moisture_satellite === "number" ? current.soil_moisture_satellite : null;
-  const temp = current ? Math.round(current.temperature_2m ?? 15) : 15;
-  const cloud = current ? Math.round(current.cloud_cover ?? 0) : 35;
-  const press = current ? Math.round(current.pressure_msl ?? 1013) : 1013;
-  const uv = current ? (current.uv_index ?? 0) : 0;
+  const temp = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : null;
+  const cloud = typeof current?.cloud_cover === 'number' ? Math.round(current.cloud_cover) : null;
+  const press = typeof current?.pressure_msl === 'number' ? Math.round(current.pressure_msl) : null;
+  const uv = typeof current?.uv_index === 'number' ? current.uv_index : null;
 
   if (mode === "ciekawostka") {
     const triviaFacts = [
@@ -1385,21 +1385,22 @@ function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: s
         isFallback: true
       },
       {
-        advice: `Ciekawostka meteorologiczna dla ${city || 'Twojego regionu'}: Przy ciśnieniu ${press} hPa i zachmurzeniu ${cloud}%, powłoka atmosferyczna waży nad Twoją głową około 10 ton na każdy metr kwadratowy!`,
+        advice: `Ciekawostka meteorologiczna dla ${city || 'Twojego regionu'}: Przy ciśnieniu ${press !== null ? `${press} hPa` : 'atmosferycznym'} i zachmurzeniu ${cloud !== null ? `${cloud}%` : 'bieżącym'}, powłoka atmosferyczna wywiera potężny nacisk na każdy metr kwadratowy powierzchni!`,
         clothes: "Lekkie ubranie i czapka z daszkiem",
         activities: "Krótka lektura o fizyce atmosfery i zjawiskach pogodowych",
         isFallback: true
       },
       {
-        advice: `Kosmiczny fakt: Geostacjonarny satelita Meteosat widzi ${city || 'Twój region'} z wysokości 35 786 km nad Ziemią! Rejestruje promieniowanie podczerwone, dzięki czemu wiemy, że temperatura gleby w okolicy wynosi ok. ${temp + 1}°C.`,
+        advice: `Kosmiczny fakt: Geostacjonarny satelita Meteosat widzi ${city || 'Twój region'} z wysokości 35 786 km nad Ziemią! Rejestruje promieniowanie podczerwone, co pozwala nam dokładnie monitorować stan atmosfery i gleby.`,
         clothes: "Wygodny strój na spacer",
         activities: "Wyszukiwanie gwiazdozbiorów lub obserwacja satelitów na niebie",
         isFallback: true
       }
     ];
 
-    // Select fact based on current temperature/moisture hash so it stays stable
-    const factIndex = Math.abs((temp + satMoisture + press) % triviaFacts.length);
+    // Select fact based on current parameters (stable hash)
+    const seed = (temp ?? 10) + (satMoisture ?? 20) + (press ?? 1000);
+    const factIndex = Math.abs(seed % triviaFacts.length);
     return triviaFacts[factIndex];
   }
 
@@ -1667,13 +1668,13 @@ app.post("/api/weather/ai", async (req, res) => {
     const prompt = `Jesteś zaawansowanym synoptykiem i asystentem pogodowym.
 Lokalizacja: ${city || 'lokalizacja'}.
 Otrzymane parametry meteorologiczne:
-- Temperatura: ${current?.temperature_2m ?? 15}°C
-- Kod pogody WMO: ${current?.weather_code ?? 0}
-- Zachmurzenie optyczne: ${current?.cloud_cover ?? 30}%
-- Wilgotność gleby (satelita): ${current?.soil_moisture_satellite ?? 25}%
-- Opady: ${current?.precipitation ?? 0} mm
-- Wiatr: ${current?.wind_speed_10m ?? 10} km/h
-- Indeks UV: ${current?.uv_index ?? 3}
+- Temperatura: ${typeof current?.temperature_2m === 'number' ? current.temperature_2m + '°C' : 'Brak danych'}
+- Kod pogody WMO: ${typeof current?.weather_code === 'number' ? current.weather_code : 'Brak danych'}
+- Zachmurzenie optyczne: ${typeof current?.cloud_cover === 'number' ? current.cloud_cover + '%' : 'Brak danych'}
+- Wilgotność gleby (satelita): ${typeof current?.soil_moisture_satellite === 'number' ? current.soil_moisture_satellite + '%' : 'Brak danych'}
+- Opady: ${typeof current?.precipitation === 'number' ? current.precipitation + ' mm' : 'Brak danych'}
+- Wiatr: ${typeof current?.wind_speed_10m === 'number' ? current.wind_speed_10m + ' km/h' : 'Brak danych'}
+- Indeks UV: ${typeof current?.uv_index === 'number' ? current.uv_index : 'Brak danych'}
 
 Zadanie: ${modePrompt}
 
