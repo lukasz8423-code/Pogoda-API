@@ -25,8 +25,8 @@ app.use((req, res, next) => {
 const apiKey = process.env.GEMINI_API_KEY?.trim();
 
 // Ensure humidity is within 0-100 range without artificial scaling or "fixing" low values
-function normalizeHumidity(val: any): number {
-  if (val === undefined || val === null || isNaN(Number(val))) return 0;
+function normalizeHumidity(val: any): number | null {
+  if (val === undefined || val === null || isNaN(Number(val))) return null;
   let h = Number(val);
   
   // Fraction decimal (0.0 to 1.0) -> convert to percentage if detected
@@ -44,31 +44,14 @@ let giosStationsCache: { data: any[]; timestamp: number } | null = null;
 const giosAqiCache = new Map<number, { data: any; timestamp: number }>();
 
 /**
- * Calculates physics-based solar radiation (W/m²) taking into account:
- * 1. Time of day (nighttime = 0 W/m²).
- * 2. Solar elevation angle curve (peak at noon ~780 W/m² clear sky).
- * 3. Cloud cover attenuation: heavy overcast (75-100% clouds) reduces solar radiation drastically (5-15% of clear sky).
+ * Returns raw API shortwave radiation or null if unavailable.
+ * No custom modeling or time-based attenuation.
  */
-function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean = true, rawApiShortwave?: number): number {
-  if (!isDayTime) return 0;
-
+function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean = true, rawApiShortwave?: number): number | null {
   if (typeof rawApiShortwave === 'number' && !isNaN(rawApiShortwave) && rawApiShortwave >= 0) {
     return Math.round(rawApiShortwave);
   }
-
-  const now = new Date();
-  const currentHour = now.getHours() + now.getMinutes() / 60;
-
-  if (currentHour < 5.0 || currentHour > 21.0) {
-    return 0;
-  }
-
-  const dayProgress = (currentHour - 5.0) / 16.0;
-  const clearSkyMax = Math.max(0, 850 * Math.sin(Math.PI * dayProgress));
-  const C = Math.max(0, Math.min(100, cloudCoverPercent || 0));
-  const cloudTransmittance = Math.max(0.1, 1.0 - (C / 100) * 0.75);
-
-  return Math.round(clearSkyMax * cloudTransmittance);
+  return null;
 }
 
 const IMGW_STATIONS = [
@@ -247,7 +230,7 @@ function parseMetNorwayToWeatherData(data: any): any {
   const curPressure = inst.air_pressure_at_sea_level ?? null;
   const curWind = typeof inst.wind_speed === 'number' ? Number((inst.wind_speed * 3.6).toFixed(1)) : null;
   const curWindDir = inst.wind_from_direction ?? null;
-  const curPrecip = next1.details?.precipitation_amount ?? 0;
+  const curPrecip = next1.details?.precipitation_amount ?? null;
   const curUv = inst.ultraviolet_index_clear_sky ?? null;
 
   const hourlyTime: string[] = [];
@@ -276,7 +259,7 @@ function parseMetNorwayToWeatherData(data: any): any {
     const press = stInst.air_pressure_at_sea_level ?? null;
     const wind = typeof stInst.wind_speed === 'number' ? Number((stInst.wind_speed * 3.6).toFixed(1)) : null;
     const windDir = stInst.wind_from_direction ?? null;
-    const precip = stNext.details?.precipitation_amount ?? 0;
+    const precip = stNext.details?.precipitation_amount ?? null;
     const uv = stInst.ultraviolet_index_clear_sky ?? null;
     const stCode = metSymbolToWeatherCode(stNext.summary?.symbol_code || symbolCode);
     const dateObj = new Date(tStr);
@@ -348,7 +331,7 @@ function parseMetNorwayToWeatherData(data: any): any {
       wind_speed_10m: curWind,
       wind_direction_10m: curWindDir,
       uv_index: curUv,
-      visibility: 25000,
+      visibility: null,
       weather_code: code
     },
     hourly: {
@@ -367,7 +350,7 @@ function parseMetNorwayToWeatherData(data: any): any {
       cloud_cover_low: hourlyCloud.map(c => Math.round(c * 0.4)),
       cloud_cover_mid: hourlyCloud.map(c => Math.round(c * 0.4)),
       cloud_cover_high: hourlyCloud.map(c => Math.round(c * 0.2)),
-      visibility: new Array(hourlyTime.length).fill(25000),
+      visibility: new Array(hourlyTime.length).fill(null),
       is_day: hourlyIsDay
     },
     daily: {
@@ -420,7 +403,7 @@ async function fetchImgwMeteoData(userLat: number, userLng: number) {
         const rawTemp = parseFloat(tempStr);
         const rawHum = item.wilgotnosc_wzgledna ? parseFloat(item.wilgotnosc_wzgledna) : null;
         const rawWind = item.wiatr_srednia_predkosc ? Math.round(parseFloat(item.wiatr_srednia_predkosc) * 3.6) : null;
-        const rawRain = item.opad_10min ? parseFloat(item.opad_10min) : 0;
+        const rawRain = item.opad_10min ? parseFloat(item.opad_10min) : null;
         const rawGround = item.temperatura_gruntu ? parseFloat(item.temperatura_gruntu) : null;
 
         const timeRaw = item.temperatura_powietrza_data || item.opad_10min_data || "";
@@ -435,7 +418,7 @@ async function fetchImgwMeteoData(userLat: number, userLng: number) {
           temp: !isNaN(rawTemp) ? rawTemp : null,
           humidity: rawHum && !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
           windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
-          rainRate: !isNaN(rawRain) ? rawRain : 0,
+          rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
           groundTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
           measurementTime: formattedTime
         };
@@ -489,7 +472,7 @@ async function fetchImgwSynopData(userLat: number, userLng: number) {
         const rawHum = parseFloat(item.wilgotnosc_wzgledna);
         const rawPress = item.cisnienie ? parseFloat(item.cisnienie) : null;
         const rawWind = item.predkosc_wiatru ? Math.round(parseFloat(item.predkosc_wiatru) * 3.6) : null;
-        const rawRain = item.suma_opadu ? parseFloat(item.suma_opadu) : 0;
+        const rawRain = item.suma_opadu ? parseFloat(item.suma_opadu) : null;
 
         const timeStr = formatUtcToPolishTime(item.data_pomiaru || '', item.godzina_pomiaru || '');
 
@@ -503,7 +486,7 @@ async function fetchImgwSynopData(userLat: number, userLng: number) {
           humidity: !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
           pressure: rawPress && !isNaN(rawPress) ? Math.round(rawPress) : null,
           windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
-          rainRate: !isNaN(rawRain) ? rawRain : 0,
+          rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
           measurementTime: timeStr
         };
       }
@@ -927,25 +910,22 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
 
     weatherData.activeServers = activeServers;
 
-    const baseTemp = weatherData.current?.temperature_2m ?? (weatherData.hourly?.temperature_2m?.[0] ?? 12);
-    const baseHum = normalizeHumidity(weatherData.current?.relative_humidity_2m ?? (weatherData.hourly?.relative_humidity_2m?.[0] ?? 70));
+    const baseTemp = weatherData.current?.temperature_2m ?? (weatherData.hourly?.temperature_2m?.[0] ?? null);
+    const baseHum = normalizeHumidity(weatherData.current?.relative_humidity_2m ?? (weatherData.hourly?.relative_humidity_2m?.[0] ?? null));
     const c = weatherData.current ?? {};
-    const baseWind = weatherData.current?.wind_speed_10m ?? 12;
+    const baseWind = weatherData.current?.wind_speed_10m ?? null;
 
     // Calculate Perceived Optical Cloud Cover & Ground Truth Solar Irradiance:
-    // High clouds (cirrus) are thin, transparent ice filaments and do not block blue sky or direct sunlight.
-    // Low clouds (stratus, cumulus) block 100% of the sky.
-    // Mid clouds (altocumulus) block ~35-50%.
-    const lowC = typeof c.cloud_cover_low === 'number' ? c.cloud_cover_low : 0;
-    const midC = typeof c.cloud_cover_mid === 'number' ? c.cloud_cover_mid : 0;
-    const highC = typeof c.cloud_cover_high === 'number' ? c.cloud_cover_high : 0;
-    const totalC = typeof c.cloud_cover === 'number' ? c.cloud_cover : 0;
+    const lowC = typeof c.cloud_cover_low === 'number' ? c.cloud_cover_low : null;
+    const midC = typeof c.cloud_cover_mid === 'number' ? c.cloud_cover_mid : null;
+    const highC = typeof c.cloud_cover_high === 'number' ? c.cloud_cover_high : null;
+    const totalC = typeof c.cloud_cover === 'number' ? c.cloud_cover : null;
     const isDay = c.is_day === 1;
 
-    const swRad = typeof c.shortwave_radiation === 'number' ? c.shortwave_radiation : 0;
-    const dniRad = typeof c.direct_normal_irradiance === 'number' ? c.direct_normal_irradiance : 0;
-    const uvVal = typeof c.uv_index === 'number' ? c.uv_index : 0;
-    const precipVal = typeof c.precipitation === 'number' ? c.precipitation : 0;
+    const swRad = typeof c.shortwave_radiation === 'number' ? c.shortwave_radiation : null;
+    const dniRad = typeof c.direct_normal_irradiance === 'number' ? c.direct_normal_irradiance : null;
+    const uvVal = typeof c.uv_index === 'number' ? c.uv_index : null;
+    const precipVal = typeof c.precipitation === 'number' ? c.precipitation : null;
 
     // Removed weighting consensus logic. Using primary weather source raw data for current.
     
@@ -982,11 +962,11 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     // IMGW station data provided separately
     weatherData.imgwStation = imgwData;
     
-    // Calculate satellite soil moisture for current hour using raw data
-    let wilgotnoscSatelitarna = 28;
+    // Determine soil moisture from satellite data (raw 0-1cm moisture)
+    let wilgotnoscSatelitarna = null;
     if (typeof weatherData.current?.soil_moisture_0_to_1cm === 'number') {
       const sm0 = weatherData.current.soil_moisture_0_to_1cm;
-      wilgotnoscSatelitarna = Math.round(Math.min(85, Math.max(5, sm0 > 1 ? sm0 : sm0 * 100)));
+      wilgotnoscSatelitarna = Math.round(sm0 > 1 ? sm0 : sm0 * 100);
     } else if (weatherData.hourly && Array.isArray(weatherData.hourly.soil_moisture_0_to_1cm) && weatherData.hourly.soil_moisture_0_to_1cm.length > 0) {
       const sm0Arr = weatherData.hourly.soil_moisture_0_to_1cm;
       const times = weatherData.hourly.time ?? [];
@@ -995,13 +975,10 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
       if (idx === -1) idx = new Date().getHours();
       if (idx >= sm0Arr.length) idx = 0;
 
-      const sm0 = sm0Arr[idx] ?? 0.21;
-      const rawMoisture = sm0 > 1 ? sm0 : sm0 * 100;
-      wilgotnoscSatelitarna = Math.round(Math.min(85, Math.max(5, rawMoisture)));
-    } else {
-      const hum = weatherData.current?.relative_humidity_2m ?? 60;
-      const precip = weatherData.current?.precipitation ?? 0;
-      wilgotnoscSatelitarna = Math.round(Math.min(65, Math.max(12, hum * 0.3 + precip * 4)));
+      const sm0 = sm0Arr[idx];
+      if (typeof sm0 === 'number') {
+        wilgotnoscSatelitarna = Math.round(sm0 > 1 ? sm0 : sm0 * 100);
+      }
     }
     
     if (weatherData.current) {
@@ -1028,16 +1005,16 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
 
     weatherData.sourcesData = {
       gpsSource: {
-        temp: weatherData.current?.temperature_2m ?? baseTemp,
-        cloud: weatherData.current?.cloud_cover ?? 0,
-        humidity: weatherData.current?.relative_humidity_2m ?? 60,
+        temp: weatherData.current?.temperature_2m ?? null,
+        cloud: weatherData.current?.cloud_cover ?? null,
+        humidity: weatherData.current?.relative_humidity_2m ?? null,
         label: "Prognoza dla lokalizacji GPS"
       },
       imgw: imgwData ? {
         temp: imgwData.temp,
-        humidity: imgwData.humidity ?? 60,
-        wind: imgwData.windSpeed ?? 0,
-        pressure: imgwData.pressure ?? (weatherData.current?.pressure_msl ? Math.round(weatherData.current.pressure_msl) : 1029),
+        humidity: imgwData.humidity ?? null,
+        wind: imgwData.windSpeed ?? null,
+        pressure: imgwData.pressure ?? (weatherData.current?.pressure_msl ? Math.round(weatherData.current.pressure_msl) : null),
         stationName: imgwData.stationName,
         distanceKm: imgwData.distanceKm,
         measurementTime: imgwData.measurementTime,
@@ -1093,8 +1070,8 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         daily.uv_index_max.push(Math.max(...dayHourly.uv));
         
         const dayCodes = dayHourly.code ?? [];
-        const pSum = daily.precipitation_sum[daily.precipitation_sum.length - 1] ?? 0;
-        const maxP = daily.precipitation_probability_max[daily.precipitation_probability_max.length - 1] ?? 0;
+        const pSum = daily.precipitation_sum[daily.precipitation_sum.length - 1];
+        const maxP = daily.precipitation_probability_max[daily.precipitation_probability_max.length - 1];
 
         const getDailyCode = (codes: number[], precipSum: number, maxPop: number) => {
           if (!codes || codes.length === 0) return 0;
@@ -1272,40 +1249,39 @@ app.get("/api/stations", async (req, res) => {
       }
     }
     const cur = data.current ?? {};
-    const cloudCover = cur.cloud_cover ?? 0;
+    const cloudCover = cur.cloud_cover ?? null;
     const isDayTime = cur.is_day !== undefined ? (cur.is_day === 1) : true;
     
     // Solar radiation calculated strictly according to solar zenith and cloud transmittance physics
-    const solarRadiation = calculateSolarRadiation(cloudCover, isDayTime, cur.shortwave_radiation);
+    const solarRadiation = calculateSolarRadiation(cloudCover ?? 0, isDayTime, cur.shortwave_radiation);
 
-    const baseTemp = cur.temperature_2m ?? 0;
+    const baseTemp = cur.temperature_2m ?? null;
     const baseHumidity = normalizeHumidity(cur.relative_humidity_2m);
-    const baseWind = cur.wind_speed_10m ?? 0;
-    const basePressure = cur.pressure_msl ?? 1029;
+    const baseWind = cur.wind_speed_10m ?? null;
+    const basePressure = cur.pressure_msl ?? null;
 
     const soilTemp = cur.soil_temperature_0cm ?? baseTemp;
     
     const sm0 = cur.soil_moisture_0_to_1cm;
     const weatherCached = weatherResponseCache.get(geoKey);
     const cachedMoisture = weatherCached?.data?.weather?.current?.soil_moisture_satellite;
-    let soilMoisture = 28;
+    let soilMoisture = null;
     if (typeof cachedMoisture === 'number') {
       soilMoisture = cachedMoisture;
     } else if (typeof cur.soil_moisture_satellite === 'number') {
       soilMoisture = cur.soil_moisture_satellite;
-    } else if (sm0 !== undefined) {
+    } else if (sm0 !== undefined && sm0 !== null) {
       soilMoisture = Math.round(sm0 > 1 ? sm0 : sm0 * 100);
-    } else {
-      soilMoisture = Math.round(Math.min(65, Math.max(12, baseHumidity * 0.3 + (cur.precipitation ?? 0) * 5)));
     }
 
-    const rainRate = cur.precipitation ?? 0.0;
+    const rainRate = cur.precipitation ?? null;
 
-    const calcLeafWetness = (humidityVal: number, rainVal: number) => {
+    const calcLeafWetness = (humidityVal: number | null, rainVal: number | null) => {
+      if (humidityVal === null && rainVal === null) return { leafWetness: null, leafWetnessText: "Brak danych" };
       let index = 0;
-      if (rainVal > 0) index = 10;
-      else if (humidityVal >= 80) index = 5;
-      else if (humidityVal >= 65) index = 2;
+      if (rainVal !== null && rainVal > 0) index = 10;
+      else if (humidityVal !== null && humidityVal >= 80) index = 5;
+      else if (humidityVal !== null && humidityVal >= 65) index = 2;
       else index = 0;
       return { leafWetness: index, leafWetnessText: `${index}/15` };
     };
@@ -1333,8 +1309,8 @@ app.get("/api/stations", async (req, res) => {
           lng: realMeteo.lng,
           temp: realMeteo.temp,
           humidity: realMeteo.humidity ?? baseHumidity,
-          windSpeed: realMeteo.windSpeed ?? Math.round(baseWind),
-          pressure: Math.round(basePressure),
+          windSpeed: realMeteo.windSpeed ?? (baseWind !== null ? Math.round(baseWind) : null),
+          pressure: basePressure !== null ? Math.round(basePressure) : null,
           status: "Online - Telemetria IMGW-PIB",
           distanceKm: realMeteo.distanceKm,
           soilTemp: realMeteo.groundTemp ?? soilTemp,
@@ -1355,14 +1331,14 @@ app.get("/api/stations", async (req, res) => {
           lng: realSynop.lng,
           temp: realSynop.temp,
           humidity: realSynop.humidity ?? baseHumidity,
-          windSpeed: realSynop.windSpeed ?? Math.round(baseWind),
-          pressure: realSynop.pressure ?? Math.round(basePressure),
+          windSpeed: realSynop.windSpeed ?? (baseWind !== null ? Math.round(baseWind) : null),
+          pressure: realSynop.pressure ?? (basePressure !== null ? Math.round(basePressure) : null),
           status: "Online - Pomiary IMGW-PIB",
           distanceKm: realSynop.distanceKm,
           soilTemp: soilTemp,
           groundTemp: realSynop.temp,
           soilMoisture: soilMoisture,
-          solarRadiation: Math.round(solarRadiation * 1.05),
+          solarRadiation: solarRadiation,
           rainRate: realSynop.rainRate,
           lastPacket: realSynop.measurementTime,
           isOfficial: true
@@ -1394,16 +1370,16 @@ async function callGeminiWithFallback(prompt: string, responseMimeType: string =
 
 // Auxiliary function: generate highly detailed local weather recommendations if Gemini API is unavailable/fails
 function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: string) {
-  const satMoisture = typeof current?.soil_moisture_satellite === "number" ? current.soil_moisture_satellite : 25;
-  const temp = current ? Math.round(current.temperature_2m ?? 0) : 15;
+  const satMoisture = typeof current?.soil_moisture_satellite === "number" ? current.soil_moisture_satellite : null;
+  const temp = current ? Math.round(current.temperature_2m ?? 15) : 15;
   const cloud = current ? Math.round(current.cloud_cover ?? 0) : 35;
-  const press = current ? Math.round(current.pressure_msl ?? 1029) : 1029;
-  const uv = current ? (current.uv_index ?? 3) : 3;
+  const press = current ? Math.round(current.pressure_msl ?? 1013) : 1013;
+  const uv = current ? (current.uv_index ?? 0) : 0;
 
   if (mode === "ciekawostka") {
     const triviaFacts = [
       {
-        advice: `Czy wiesz, że radary mikrofalowe pasma C na satelitach europejskich Sentinel-1 prześwietlają glebę w rejonie ${city || 'Twoim'} na głębokość 3 cm? Dzisiejsza wilgotność gleby z kosmosu wynosi dokładnie ${satMoisture}%.`,
+        advice: `Czy wiesz, że radary mikrofalowe pasma C na satelitach europejskich Sentinel-1 prześwietlają glebę w rejonie ${city || 'Twoim'} na głębokość 3 cm? ${satMoisture !== null ? `Dzisiejsza wilgotność gleby z kosmosu wynosi dokładnie ${satMoisture}%.` : 'Dane o wilgotności gleby są aktualizowane przez system Copernicus.'}`,
         clothes: "Okulary astronomiczne i ciekawość świata",
         activities: "Obserwacja chmur i sprawdzanie danych satelitarnych Copernicus",
         isFallback: true
