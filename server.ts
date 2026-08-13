@@ -247,7 +247,7 @@ function parseMetNorwayToWeatherData(data: any): any {
   const hourlyCode: number[] = [];
   const hourlyIsDay: number[] = [];
 
-  const dailyMap = new Map<string, { temps: number[]; precips: number[]; uvs: number[]; winds: number[]; codes: number[] }>();
+  const dailyMap = new Map<string, { temps: number[]; precips: number[]; uvs: number[]; winds: number[]; codes: number[]; probs: number[] }>();
 
   for (const step of timeseries.slice(0, 48)) {
     const stInst = step.data?.instant?.details || {};
@@ -262,6 +262,7 @@ function parseMetNorwayToWeatherData(data: any): any {
     const precip = stNext.details?.precipitation_amount ?? null;
     const uv = stInst.ultraviolet_index_clear_sky ?? null;
     const stCode = metSymbolToWeatherCode(stNext.summary?.symbol_code || symbolCode);
+    const prob = stNext.details?.probability_of_precipitation ?? null;
     const dateObj = new Date(tStr);
     const hour = dateObj.getHours();
     const isDay = hour >= 6 && hour <= 21 ? 1 : 0;
@@ -273,7 +274,7 @@ function parseMetNorwayToWeatherData(data: any): any {
     hourlyWind.push(wind);
     hourlyWindDir.push(windDir);
     hourlyPressure.push(press);
-    hourlyPrecipProb.push(precip > 0 ? 80 : 0);
+    hourlyPrecipProb.push(prob);
     hourlyPrecip.push(precip);
     hourlyUv.push(uv);
     hourlyCloud.push(cloud);
@@ -282,7 +283,7 @@ function parseMetNorwayToWeatherData(data: any): any {
 
     const dateKey = tStr.split("T")[0];
     if (!dailyMap.has(dateKey)) {
-      dailyMap.set(dateKey, { temps: [], precips: [], uvs: [], winds: [], codes: [] });
+      dailyMap.set(dateKey, { temps: [], precips: [], uvs: [], winds: [], codes: [], probs: [] });
     }
     const dObj = dailyMap.get(dateKey)!;
     dObj.temps.push(temp);
@@ -290,6 +291,7 @@ function parseMetNorwayToWeatherData(data: any): any {
     dObj.uvs.push(uv);
     dObj.winds.push(wind);
     dObj.codes.push(stCode);
+    dObj.probs.push(prob);
   }
 
   const dailyTime: string[] = [];
@@ -301,15 +303,29 @@ function parseMetNorwayToWeatherData(data: any): any {
   const dailyPrecipProbMax: number[] = [];
   const dailyWindMax: number[] = [];
 
+  const safeMax = (arr: any[]) => {
+    const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+    return filtered.length > 0 ? Math.max(...filtered) : null;
+  };
+
+  const safeMin = (arr: any[]) => {
+    const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+    return filtered.length > 0 ? Math.min(...filtered) : null;
+  };
+
+  const safeSum = (arr: any[]) => {
+    const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+    return filtered.length > 0 ? Number(filtered.reduce((a, b) => a + b, 0).toFixed(1)) : null;
+  };
+
   for (const [dKey, dObj] of dailyMap.entries()) {
     dailyTime.push(dKey);
-    dailyTempMax.push(Math.max(...dObj.temps));
-    dailyTempMin.push(Math.min(...dObj.temps));
-    dailyUvMax.push(Math.max(...dObj.uvs));
-    const pSum = dObj.precips.reduce((a, b) => a + b, 0);
-    dailyPrecipSum.push(Number(pSum.toFixed(1)));
-    dailyPrecipProbMax.push(pSum > 0 ? 85 : 0);
-    dailyWindMax.push(Math.max(...dObj.winds));
+    dailyTempMax.push(safeMax(dObj.temps));
+    dailyTempMin.push(safeMin(dObj.temps));
+    dailyUvMax.push(safeMax(dObj.uvs));
+    dailyPrecipSum.push(safeSum(dObj.precips));
+    dailyPrecipProbMax.push(safeMax(dObj.probs));
+    dailyWindMax.push(safeMax(dObj.winds));
     dailyCode.push(dObj.codes[0] ?? code);
   }
 
@@ -1047,6 +1063,21 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         wind_speed_10m_max: []
       };
 
+      const safeMax = (arr: any[]) => {
+        const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+        return filtered.length > 0 ? Math.max(...filtered) : null;
+      };
+
+      const safeMin = (arr: any[]) => {
+        const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+        return filtered.length > 0 ? Math.min(...filtered) : null;
+      };
+
+      const safeSum = (arr: any[]) => {
+        const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
+        return filtered.length > 0 ? Number(filtered.reduce((a, b) => a + b, 0).toFixed(1)) : null;
+      };
+
       for (let d = 0; d < 7; d++) {
         const start = d * 24;
         const end = start + 24;
@@ -1062,18 +1093,18 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         };
         
         daily.time.push(hourly.time[start].split('T')[0]); // YYYY-MM-DD
-        daily.temperature_2m_max.push(Math.max(...dayHourly.temp));
-        daily.temperature_2m_min.push(Math.min(...dayHourly.temp));
-        daily.precipitation_sum.push(parseFloat(dayHourly.precip.reduce((a: number, b: number) => a + (b ?? 0), 0).toFixed(1)));
-        daily.precipitation_probability_max.push(Math.max(...dayHourly.prob));
-        daily.wind_speed_10m_max.push(Math.max(...dayHourly.wind));
-        daily.uv_index_max.push(Math.max(...dayHourly.uv));
+        daily.temperature_2m_max.push(safeMax(dayHourly.temp));
+        daily.temperature_2m_min.push(safeMin(dayHourly.temp));
+        daily.precipitation_sum.push(safeSum(dayHourly.precip));
+        daily.precipitation_probability_max.push(safeMax(dayHourly.prob));
+        daily.wind_speed_10m_max.push(safeMax(dayHourly.wind));
+        daily.uv_index_max.push(safeMax(dayHourly.uv));
         
         const dayCodes = dayHourly.code ?? [];
         const pSum = daily.precipitation_sum[daily.precipitation_sum.length - 1];
         const maxP = daily.precipitation_probability_max[daily.precipitation_probability_max.length - 1];
 
-        const getDailyCode = (codes: number[], precipSum: number, maxPop: number) => {
+        const getDailyCode = (codes: number[], precipSum: number | null, maxPop: number | null) => {
           if (!codes || codes.length === 0) return 0;
           
           const getSeverity = (code: number) => {
@@ -1253,7 +1284,7 @@ app.get("/api/stations", async (req, res) => {
     const isDayTime = cur.is_day !== undefined ? (cur.is_day === 1) : true;
     
     // Solar radiation calculated strictly according to solar zenith and cloud transmittance physics
-    const solarRadiation = calculateSolarRadiation(cloudCover ?? 0, isDayTime, cur.shortwave_radiation);
+    const solarRadiation = calculateSolarRadiation(cloudCover, isDayTime, cur.shortwave_radiation);
 
     const baseTemp = cur.temperature_2m ?? null;
     const baseHumidity = normalizeHumidity(cur.relative_humidity_2m);
