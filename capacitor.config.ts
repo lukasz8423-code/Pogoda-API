@@ -2,11 +2,12 @@ import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'com.pogodaapi.app',
-  appName: 'Aura Weather',
+  appName: 'Aura Pogoda',
   webDir: 'dist',
-  bundledWebRuntime: false,
   server: {
-    androidScheme: 'https'
+    androidScheme: 'https',
+    cleartext: true,
+    allowNavigation: ['*']
   }
 };
 
