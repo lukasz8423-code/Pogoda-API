@@ -55,70 +55,68 @@ function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean =
 }
 
 const IMGW_STATIONS = [
-  { id: "12100", name: "Kołobrzeg", lat: 54.18, lng: 15.58 },
-  { id: "12105", name: "Koszalin", lat: 54.20, lng: 16.18 },
-  { id: "12115", name: "Ustka", lat: 54.58, lng: 16.85 },
-  { id: "12120", name: "Lębork", lat: 54.53, lng: 17.75 },
-  { id: "12125", name: "Hel", lat: 54.60, lng: 18.80 },
-  { id: "12135", name: "Gdańsk", lat: 54.38, lng: 18.47 },
-  { id: "12150", name: "Elbląg", lat: 54.17, lng: 19.43 },
-  { id: "12160", name: "Olsztyn", lat: 53.77, lng: 20.48 },
-  { id: "12180", name: "Mikołajki", lat: 53.80, lng: 21.57 },
-  { id: "12195", name: "Suwałki", lat: 54.13, lng: 22.95 },
-  { id: "12200", name: "Świnoujście", lat: 53.92, lng: 14.23 },
-  { id: "12205", name: "Szczecin", lat: 53.40, lng: 14.62 },
-  { id: "12215", name: "Resko", lat: 53.77, lng: 15.40 },
-  { id: "12230", name: "Chojnice", lat: 53.70, lng: 17.55 },
-  { id: "12235", name: "Piła", lat: 53.15, lng: 16.74 },
-  { id: "12250", name: "Toruń", lat: 53.03, lng: 18.60 },
-  { id: "12270", name: "Mława", lat: 53.11, lng: 20.38 },
-  { id: "12280", name: "Ostrołęka", lat: 53.08, lng: 21.57 },
-  { id: "12295", name: "Białystok", lat: 53.10, lng: 23.17 },
-  { id: "12300", name: "Gorzów Wlkp.", lat: 52.73, lng: 15.23 },
-  { id: "12330", name: "Poznań", lat: 52.42, lng: 16.83 },
-  { id: "12345", name: "Gniezno", lat: 52.53, lng: 17.60 },
-  { id: "12360", name: "Koło", lat: 52.20, lng: 18.65 },
-  { id: "12375", name: "Warszawa", lat: 52.16, lng: 20.96 },
-  { id: "12385", name: "Siedlce", lat: 52.17, lng: 22.28 },
-  { id: "12399", name: "Terespol", lat: 52.07, lng: 23.60 },
-  { id: "12400", name: "Zielona Góra", lat: 51.93, lng: 15.52 },
-  { id: "12415", name: "Legnica", lat: 51.21, lng: 16.17 },
-  { id: "12424", name: "Leszno", lat: 51.84, lng: 16.58 },
-  { id: "12435", name: "Kalisz", lat: 51.76, lng: 18.08 },
-  { id: "12455", name: "Wieluń", lat: 51.22, lng: 18.57 },
-  { id: "12465", name: "Łódź", lat: 51.72, lng: 19.40 },
-  { id: "12485", name: "Radom", lat: 51.40, lng: 21.16 },
-  { id: "12495", name: "Lublin", lat: 51.22, lng: 22.60 },
-  { id: "12500", name: "Jelenia Góra", lat: 50.90, lng: 15.73 },
-  { id: "12510", name: "Śnieżka", lat: 50.74, lng: 15.74 },
-  { id: "12520", name: "Kłodzko", lat: 50.44, lng: 16.65 },
-  { id: "12530", name: "Wrocław", lat: 51.10, lng: 16.88 },
-  { id: "12540", name: "Opole", lat: 50.67, lng: 17.93 },
-  { id: "12550", name: "Częstochowa", lat: 50.81, lng: 19.12 },
-  { id: "12560", name: "Katowice", lat: 50.24, lng: 19.03 },
-  { id: "12570", name: "Kraków", lat: 50.08, lng: 19.80 },
-  { id: "12580", name: "Zakopane", lat: 49.30, lng: 19.96 },
-  { id: "12585", name: "Kasprowy Wierch", lat: 49.23, lng: 19.98 },
-  { id: "12590", name: "Nowy Sącz", lat: 49.63, lng: 20.69 },
-  { id: "12600", name: "Bielsko Biała", lat: 49.81, lng: 19.00 },
-  { id: "12625", name: "Tarnów", lat: 50.02, lng: 21.00 },
-  { id: "12660", name: "Rzeszów", lat: 50.11, lng: 22.02 },
-  { id: "12690", name: "Lesko", lat: 49.47, lng: 22.33 },
-  { id: "12695", name: "Przemyśl", lat: 49.78, lng: 22.77 },
-  { id: "12255", name: "Płock", lat: 52.55, lng: 19.70 },
-  { id: "12185", name: "Kętrzyn", lat: 54.08, lng: 21.38 },
-  { id: "12470", name: "Kozienice", lat: 51.58, lng: 21.55 },
-  { id: "12582", name: "Krosno", lat: 49.68, lng: 21.77 },
-  { id: "12110", name: "Łeba", lat: 54.75, lng: 17.55 },
-  { id: "12140", name: "Platforma", lat: 55.30, lng: 18.20 },
-  { id: "12565", name: "Racibórz", lat: 50.08, lng: 18.18 },
-  { id: "12670", name: "Sandomierz", lat: 50.68, lng: 21.75 },
-  { id: "12310", name: "Słubice", lat: 52.35, lng: 14.57 },
-  { id: "12210", name: "Szczecinek", lat: 53.71, lng: 16.68 },
-  { id: "12497", name: "Włodawa", lat: 51.55, lng: 23.53 },
-  { id: "12680", name: "Zamość", lat: 50.72, lng: 23.25 },
-  { id: "12505", name: "Sulejów", lat: 51.35, lng: 19.88 },
-  { id: "12575", name: "Kielce", lat: 50.81, lng: 20.63 }
+  { id: "12001", name: "Platforma", lat: 55.3000, lng: 18.1900 },
+  { id: "12100", name: "Kołobrzeg", lat: 54.1833, lng: 15.5833 },
+  { id: "12105", name: "Koszalin", lat: 54.2000, lng: 16.1500 },
+  { id: "12115", name: "Ustka", lat: 54.5833, lng: 16.8500 },
+  { id: "12120", name: "Łeba", lat: 54.7500, lng: 17.5333 },
+  { id: "12125", name: "Lębork", lat: 54.5500, lng: 17.7500 },
+  { id: "12135", name: "Hel", lat: 54.6000, lng: 18.8000 },
+  { id: "12155", name: "Gdańsk", lat: 54.3833, lng: 18.6000 },
+  { id: "12160", name: "Elbląg", lat: 54.1667, lng: 19.4333 },
+  { id: "12185", name: "Kętrzyn", lat: 54.0667, lng: 21.3667 },
+  { id: "12195", name: "Suwałki", lat: 54.1333, lng: 22.9500 },
+  { id: "12200", name: "Świnoujście", lat: 53.9167, lng: 14.2333 },
+  { id: "12205", name: "Szczecin", lat: 53.4000, lng: 14.6333 },
+  { id: "12210", name: "Resko", lat: 53.7667, lng: 15.4000 },
+  { id: "12215", name: "Szczecinek", lat: 53.7167, lng: 16.7000 },
+  { id: "12230", name: "Piła", lat: 53.1333, lng: 16.7500 },
+  { id: "12235", name: "Chojnice", lat: 53.7000, lng: 17.5500 },
+  { id: "12250", name: "Toruń", lat: 53.0333, lng: 18.6000 },
+  { id: "12270", name: "Mława", lat: 53.1000, lng: 20.3667 },
+  { id: "12272", name: "Olsztyn", lat: 53.7667, lng: 20.4167 },
+  { id: "12280", name: "Mikołajki", lat: 53.7833, lng: 21.5833 },
+  { id: "12285", name: "Ostrołęka", lat: 53.0833, lng: 21.5667 },
+  { id: "12295", name: "Białystok", lat: 53.1000, lng: 23.1667 },
+  { id: "12300", name: "Gorzów", lat: 52.7333, lng: 15.2833 },
+  { id: "12310", name: "Słubice", lat: 52.3500, lng: 14.6000 },
+  { id: "12330", name: "Poznań", lat: 52.4167, lng: 16.8333 },
+  { id: "12345", name: "Koło", lat: 52.2000, lng: 18.6500 },
+  { id: "12360", name: "Płock", lat: 52.5833, lng: 19.7167 },
+  { id: "12375", name: "Warszawa", lat: 52.1667, lng: 20.9667 },
+  { id: "12385", name: "Siedlce", lat: 52.1833, lng: 22.2500 },
+  { id: "12399", name: "Terespol", lat: 52.0833, lng: 23.6167 },
+  { id: "12400", name: "Zielona Góra", lat: 51.9333, lng: 15.5333 },
+  { id: "12415", name: "Legnica", lat: 51.2000, lng: 16.2000 },
+  { id: "12418", name: "Leszno", lat: 51.8333, lng: 16.5333 },
+  { id: "12424", name: "Wrocław", lat: 51.1000, lng: 16.8833 },
+  { id: "12435", name: "Kalisz", lat: 51.7833, lng: 18.0833 },
+  { id: "12455", name: "Wieluń", lat: 51.2167, lng: 18.5667 },
+  { id: "12465", name: "Łódź", lat: 51.7333, lng: 19.4000 },
+  { id: "12469", name: "Sulejów", lat: 51.3500, lng: 19.8667 },
+  { id: "12488", name: "Kozienice", lat: 51.5667, lng: 21.5500 },
+  { id: "12495", name: "Lublin", lat: 51.2167, lng: 22.4000 },
+  { id: "12497", name: "Włodawa", lat: 51.5500, lng: 23.5333 },
+  { id: "12500", name: "Jelenia Góra", lat: 50.9000, lng: 15.8000 },
+  { id: "12510", name: "Śnieżka", lat: 50.7333, lng: 15.7333 },
+  { id: "12520", name: "Kłodzko", lat: 50.4333, lng: 16.6167 },
+  { id: "12530", name: "Opole", lat: 50.6333, lng: 17.9667 },
+  { id: "12540", name: "Racibórz", lat: 50.0667, lng: 18.1833 },
+  { id: "12550", name: "Częstochowa", lat: 50.8167, lng: 19.1000 },
+  { id: "12560", name: "Katowice", lat: 50.2333, lng: 19.0333 },
+  { id: "12566", name: "Kraków", lat: 50.0833, lng: 19.8000 },
+  { id: "12570", name: "Kielce", lat: 50.8167, lng: 20.7000 },
+  { id: "12575", name: "Tarnów", lat: 50.0333, lng: 20.9833 },
+  { id: "12580", name: "Rzeszów", lat: 50.1167, lng: 22.0500 },
+  { id: "12585", name: "Sandomierz", lat: 50.7000, lng: 21.7167 },
+  { id: "12595", name: "Zamość", lat: 50.7000, lng: 23.2000 },
+  { id: "12600", name: "Bielsko Biała", lat: 49.8000, lng: 19.0000 },
+  { id: "12625", name: "Zakopane", lat: 49.3000, lng: 19.9667 },
+  { id: "12650", name: "Kasprowy Wierch", lat: 49.2333, lng: 19.9833 },
+  { id: "12660", name: "Nowy Sącz", lat: 49.6333, lng: 20.7000 },
+  { id: "12670", name: "Krosno", lat: 49.7000, lng: 21.7667 },
+  { id: "12690", name: "Lesko", lat: 49.4667, lng: 22.3333 },
+  { id: "12695", name: "Przemyśl", lat: 49.8000, lng: 22.7667 }
 ];
 
 function normalizeStationName(str: string): string {
@@ -401,8 +399,7 @@ async function fetchImgwMeteoData(userLat: number, userLng: number) {
     const meteoList = await res.json();
     if (!Array.isArray(meteoList) || meteoList.length === 0) return null;
 
-    let bestStation: any = null;
-    let minDistance = Infinity;
+    const candidates: any[] = [];
 
     for (const item of meteoList) {
       if (!item || !item.lat || !item.lon) continue;
@@ -413,36 +410,52 @@ async function fetchImgwMeteoData(userLat: number, userLng: number) {
       const tempStr = item.temperatura_powietrza;
       if (tempStr === null || tempStr === undefined || tempStr === "") continue;
 
+      const rawTemp = parseFloat(tempStr);
+      if (isNaN(rawTemp)) continue;
+
       const dist = getDistanceKm(userLat, userLng, stLat, stLng);
-      if (dist < minDistance) {
-        minDistance = dist;
-        const rawTemp = parseFloat(tempStr);
-        const rawHum = item.wilgotnosc_wzgledna ? parseFloat(item.wilgotnosc_wzgledna) : null;
-        const rawWind = item.wiatr_srednia_predkosc ? Math.round(parseFloat(item.wiatr_srednia_predkosc) * 3.6) : null;
-        const rawRain = item.opad_10min ? parseFloat(item.opad_10min) : null;
-        const rawGround = item.temperatura_gruntu ? parseFloat(item.temperatura_gruntu) : null;
+      const rawHum = item.wilgotnosc_wzgledna ? parseFloat(item.wilgotnosc_wzgledna) : null;
+      const rawWind = item.wiatr_srednia_predkosc ? Math.round(parseFloat(item.wiatr_srednia_predkosc) * 3.6) : null;
+      const rawRain = item.opad_10min ? parseFloat(item.opad_10min) : null;
+      const rawGround = item.temperatura_gruntu ? parseFloat(item.temperatura_gruntu) : null;
 
-        const timeRaw = item.temperatura_powietrza_data || item.opad_10min_data || "";
-        const formattedTime = timeRaw ? formatUtcToPolishTime(timeRaw) : "";
+      const timeRaw = item.temperatura_powietrza_data || item.opad_10min_data || "";
+      const formattedTime = timeRaw ? formatUtcToPolishTime(timeRaw) : "";
 
-        bestStation = {
-          raw: item,
-          stationName: item.nazwa_stacji,
-          distanceKm: dist,
-          lat: stLat,
-          lng: stLng,
-          temp: !isNaN(rawTemp) ? rawTemp : null,
-          humidity: rawHum && !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
-          windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
-          rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
-          groundTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
-          measurementTime: formattedTime
-        };
-      }
+      candidates.push({
+        raw: item,
+        stationName: item.nazwa_stacji,
+        distanceKm: Number(dist.toFixed(1)),
+        lat: stLat,
+        lng: stLng,
+        temp: rawTemp,
+        humidity: rawHum && !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
+        windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
+        rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
+        groundTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
+        measurementTime: formattedTime
+      });
     }
 
-    if (bestStation && minDistance < 120 && bestStation.temp !== null) {
-      console.log(`[IMGW METEO API] Nearest telemetry station matched: ${bestStation.stationName} (${bestStation.distanceKm} km away from lat:${userLat}, lng:${userLng}). Temp: ${bestStation.temp}°C at ${bestStation.measurementTime}`);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    console.log(`📡 [IMGW METEO API] Nearest candidates for GPS (${userLat.toFixed(4)}, ${userLng.toFixed(4)}):`);
+    console.table(
+      candidates.slice(0, 10).map((c, i) => ({
+        "Poz.": i + 1,
+        "Stacja Telemetryczna": c.stationName,
+        "Lat": c.lat,
+        "Lng": c.lng,
+        "Odległość (km)": c.distanceKm,
+        "Temp (°C)": c.temp
+      }))
+    );
+
+    const bestStation = candidates[0];
+    if (bestStation && bestStation.distanceKm < 120 && bestStation.temp !== null) {
+      console.log(`✅ [IMGW METEO API] Wybrano stację telemetryczną: ${bestStation.stationName} (${bestStation.distanceKm} km)`);
       return bestStation;
     }
     return null;
@@ -466,50 +479,75 @@ async function fetchImgwSynopData(userLat: number, userLng: number) {
     const synopList = await res.json();
     if (!Array.isArray(synopList) || synopList.length === 0) return null;
 
-    let bestStation: any = null;
-    let minDistance = Infinity;
+    const candidates: any[] = [];
 
     for (const item of synopList) {
       if (!item || !item.stacja || item.temperatura === undefined || item.temperatura === null) continue;
-      const rawName = item.stacja.trim();
-      const normRaw = normalizeStationName(rawName);
       
-      const matched = IMGW_STATIONS.find(s => {
-        const normS = normalizeStationName(s.name);
-        return normS === normRaw || normRaw.includes(normS) || normS.includes(normRaw);
-      });
+      let matched = IMGW_STATIONS.find(s => s.id === item.id_stacji);
+      if (!matched) {
+        const rawName = item.stacja.trim();
+        const normRaw = normalizeStationName(rawName);
+        matched = IMGW_STATIONS.find(s => {
+          const normS = normalizeStationName(s.name);
+          return normS === normRaw || normRaw.includes(normS) || normS.includes(normRaw);
+        });
+      }
 
       if (!matched) continue;
 
       const dist = getDistanceKm(userLat, userLng, matched.lat, matched.lng);
-      if (dist < minDistance) {
-        minDistance = dist;
-        const rawTemp = parseFloat(item.temperatura);
-        const rawHum = parseFloat(item.wilgotnosc_wzgledna);
-        const rawPress = item.cisnienie ? parseFloat(item.cisnienie) : null;
-        const rawWind = item.predkosc_wiatru ? Math.round(parseFloat(item.predkosc_wiatru) * 3.6) : null;
-        const rawRain = item.suma_opadu ? parseFloat(item.suma_opadu) : null;
+      const rawTemp = parseFloat(item.temperatura);
+      const rawHum = parseFloat(item.wilgotnosc_wzgledna);
+      const rawPress = item.cisnienie ? parseFloat(item.cisnienie.replace(',', '.')) : null;
+      const rawWind = item.predkosc_wiatru ? Math.round(parseFloat(item.predkosc_wiatru.replace(',', '.')) * 3.6) : null;
+      const rawRain = item.suma_opadu ? parseFloat(item.suma_opadu.replace(',', '.')) : null;
 
-        const timeStr = formatUtcToPolishTime(item.data_pomiaru || '', item.godzina_pomiaru || '');
+      const timeStr = formatUtcToPolishTime(item.data_pomiaru || '', item.godzina_pomiaru || '');
 
-        bestStation = {
-          raw: item,
-          stationName: item.stacja,
-          distanceKm: dist,
-          lat: matched.lat,
-          lng: matched.lng,
-          temp: !isNaN(rawTemp) ? rawTemp : null,
-          humidity: !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
-          pressure: rawPress && !isNaN(rawPress) ? Math.round(rawPress) : null,
-          windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
-          rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
-          measurementTime: timeStr
-        };
-      }
+      candidates.push({
+        raw: item,
+        id_stacji: item.id_stacji,
+        stationName: item.stacja,
+        distanceKm: Number(dist.toFixed(1)),
+        lat: matched.lat,
+        lng: matched.lng,
+        temp: !isNaN(rawTemp) ? rawTemp : null,
+        humidity: !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
+        pressure: rawPress && !isNaN(rawPress) ? Number(rawPress.toFixed(1)) : null,
+        windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
+        rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : 0,
+        soilMoisture: null,
+        solarRadiation: null,
+        hasSoilSensor: false,
+        hasSolarSensor: false,
+        measurementTime: timeStr
+      });
     }
 
-    if (bestStation && minDistance < 50 && bestStation.temp !== null) {
-      console.log(`[IMGW SYNOP API] Nearest station matched: ${bestStation.stationName} (${bestStation.distanceKm} km away from lat:${userLat}, lng:${userLng}). Temp: ${bestStation.temp}°C`);
+    if (candidates.length === 0) return null;
+
+    candidates.sort((a, b) => a.distanceKm - b.distanceKm);
+
+    console.log(`📡 [IMGW SYNOP API] Nearest candidates for GPS (${userLat.toFixed(4)}, ${userLng.toFixed(4)}):`);
+    console.table(
+      candidates.slice(0, 10).map((c, i) => ({
+        "Poz.": i + 1,
+        "ID": c.id_stacji,
+        "Stacja Synoptyczna": c.stationName,
+        "Lat": c.lat,
+        "Lng": c.lng,
+        "Odległość (km)": c.distanceKm,
+        "Temp (°C)": c.temp,
+        "Ciśnienie (hPa)": c.pressure
+      }))
+    );
+
+    const bestStation = candidates[0];
+    if (bestStation && bestStation.temp !== null) {
+      bestStation.candidates = candidates.slice(0, 5);
+      bestStation.nearestCandidates = candidates.slice(0, 5);
+      console.log(`✅ [IMGW SYNOP API] Wybrano stację synoptyczną: ${bestStation.stationName} (${bestStation.distanceKm} km, ${bestStation.temp}°C, ${bestStation.pressure} hPa)`);
       return bestStation;
     }
     return null;
