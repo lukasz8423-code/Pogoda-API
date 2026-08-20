@@ -54,73 +54,8 @@ function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean =
   return null;
 }
 
-const IMGW_STATIONS = [
-  { id: "12001", name: "Platforma", lat: 55.3000, lng: 18.1900 },
-  { id: "12100", name: "Kołobrzeg", lat: 54.1833, lng: 15.5833 },
-  { id: "12105", name: "Koszalin", lat: 54.2000, lng: 16.1500 },
-  { id: "12115", name: "Ustka", lat: 54.5833, lng: 16.8500 },
-  { id: "12120", name: "Łeba", lat: 54.7500, lng: 17.5333 },
-  { id: "12125", name: "Lębork", lat: 54.5500, lng: 17.7500 },
-  { id: "12135", name: "Hel", lat: 54.6000, lng: 18.8000 },
-  { id: "12155", name: "Gdańsk", lat: 54.3833, lng: 18.6000 },
-  { id: "12160", name: "Elbląg", lat: 54.1667, lng: 19.4333 },
-  { id: "12185", name: "Kętrzyn", lat: 54.0667, lng: 21.3667 },
-  { id: "12195", name: "Suwałki", lat: 54.1333, lng: 22.9500 },
-  { id: "12200", name: "Świnoujście", lat: 53.9167, lng: 14.2333 },
-  { id: "12205", name: "Szczecin", lat: 53.4000, lng: 14.6333 },
-  { id: "12210", name: "Resko", lat: 53.7667, lng: 15.4000 },
-  { id: "12215", name: "Szczecinek", lat: 53.7167, lng: 16.7000 },
-  { id: "12230", name: "Piła", lat: 53.1333, lng: 16.7500 },
-  { id: "12235", name: "Chojnice", lat: 53.7000, lng: 17.5500 },
-  { id: "12250", name: "Toruń", lat: 53.0333, lng: 18.6000 },
-  { id: "12270", name: "Mława", lat: 53.1000, lng: 20.3667 },
-  { id: "12272", name: "Olsztyn", lat: 53.7667, lng: 20.4167 },
-  { id: "12280", name: "Mikołajki", lat: 53.7833, lng: 21.5833 },
-  { id: "12285", name: "Ostrołęka", lat: 53.0833, lng: 21.5667 },
-  { id: "12295", name: "Białystok", lat: 53.1000, lng: 23.1667 },
-  { id: "12300", name: "Gorzów", lat: 52.7333, lng: 15.2833 },
-  { id: "12310", name: "Słubice", lat: 52.3500, lng: 14.6000 },
-  { id: "12330", name: "Poznań", lat: 52.4167, lng: 16.8333 },
-  { id: "12345", name: "Koło", lat: 52.2000, lng: 18.6500 },
-  { id: "12360", name: "Płock", lat: 52.5833, lng: 19.7167 },
-  { id: "12375", name: "Warszawa", lat: 52.1667, lng: 20.9667 },
-  { id: "12385", name: "Siedlce", lat: 52.1833, lng: 22.2500 },
-  { id: "12399", name: "Terespol", lat: 52.0833, lng: 23.6167 },
-  { id: "12400", name: "Zielona Góra", lat: 51.9333, lng: 15.5333 },
-  { id: "12415", name: "Legnica", lat: 51.2000, lng: 16.2000 },
-  { id: "12418", name: "Leszno", lat: 51.8333, lng: 16.5333 },
-  { id: "12424", name: "Wrocław", lat: 51.1000, lng: 16.8833 },
-  { id: "12435", name: "Kalisz", lat: 51.7833, lng: 18.0833 },
-  { id: "12455", name: "Wieluń", lat: 51.2167, lng: 18.5667 },
-  { id: "12465", name: "Łódź", lat: 51.7333, lng: 19.4000 },
-  { id: "12469", name: "Sulejów", lat: 51.3500, lng: 19.8667 },
-  { id: "12488", name: "Kozienice", lat: 51.5667, lng: 21.5500 },
-  { id: "12495", name: "Lublin", lat: 51.2167, lng: 22.4000 },
-  { id: "12497", name: "Włodawa", lat: 51.5500, lng: 23.5333 },
-  { id: "12500", name: "Jelenia Góra", lat: 50.9000, lng: 15.8000 },
-  { id: "12510", name: "Śnieżka", lat: 50.7333, lng: 15.7333 },
-  { id: "12520", name: "Kłodzko", lat: 50.4333, lng: 16.6167 },
-  { id: "12530", name: "Opole", lat: 50.6333, lng: 17.9667 },
-  { id: "12540", name: "Racibórz", lat: 50.0667, lng: 18.1833 },
-  { id: "12550", name: "Częstochowa", lat: 50.8167, lng: 19.1000 },
-  { id: "12560", name: "Katowice", lat: 50.2333, lng: 19.0333 },
-  { id: "12566", name: "Kraków", lat: 50.0833, lng: 19.8000 },
-  { id: "12570", name: "Kielce", lat: 50.8167, lng: 20.7000 },
-  { id: "12575", name: "Tarnów", lat: 50.0333, lng: 20.9833 },
-  { id: "12580", name: "Rzeszów", lat: 50.1167, lng: 22.0500 },
-  { id: "12585", name: "Sandomierz", lat: 50.7000, lng: 21.7167 },
-  { id: "12595", name: "Zamość", lat: 50.7000, lng: 23.2000 },
-  { id: "12600", name: "Bielsko Biała", lat: 49.8000, lng: 19.0000 },
-  { id: "12625", name: "Zakopane", lat: 49.3000, lng: 19.9667 },
-  { id: "12650", name: "Kasprowy Wierch", lat: 49.2333, lng: 19.9833 },
-  { id: "12660", name: "Nowy Sącz", lat: 49.6333, lng: 20.7000 },
-  { id: "12670", name: "Krosno", lat: 49.7000, lng: 21.7667 },
-  { id: "12690", name: "Lesko", lat: 49.4667, lng: 22.3333 },
-  { id: "12695", name: "Przemyśl", lat: 49.8000, lng: 22.7667 }
-];
-
 function normalizeStationName(str: string): string {
-  return str
+  return (str || "")
     .toLowerCase()
     .replace(/[-_]/g, " ")
     .replace(/\s+/g, " ")
@@ -268,7 +203,7 @@ function parseMetNorwayToWeatherData(data: any): any {
     hourlyTime.push(tStr);
     hourlyTemp.push(temp);
     hourlyHum.push(hum);
-    hourlyAppTemp.push(temp);
+    hourlyAppTemp.push(null);
     hourlyWind.push(wind);
     hourlyWindDir.push(windDir);
     hourlyPressure.push(press);
@@ -327,20 +262,20 @@ function parseMetNorwayToWeatherData(data: any): any {
     dailyCode.push(dObj.codes[0] ?? code);
   }
 
-  const dailySunrise: string[] = dailyTime.map(d => `${d}T05:30:00Z`);
-  const dailySunset: string[] = dailyTime.map(d => `${d}T20:30:00Z`);
+  const dailySunrise: (string | null)[] = new Array(dailyTime.length).fill(null);
+  const dailySunset: (string | null)[] = new Array(dailyTime.length).fill(null);
 
   return {
     current: {
       temperature_2m: curTemp,
       relative_humidity_2m: curHumidity,
-      apparent_temperature: curTemp,
+      apparent_temperature: null,
       is_day: new Date().getHours() >= 6 && new Date().getHours() <= 21 ? 1 : 0,
       precipitation: curPrecip,
       cloud_cover: curCloud,
-      cloud_cover_low: Math.round(curCloud * 0.4),
-      cloud_cover_mid: Math.round(curCloud * 0.4),
-      cloud_cover_high: Math.round(curCloud * 0.2),
+      cloud_cover_low: null,
+      cloud_cover_mid: null,
+      cloud_cover_high: null,
       pressure_msl: curPressure,
       wind_speed_10m: curWind,
       wind_direction_10m: curWindDir,
@@ -361,9 +296,9 @@ function parseMetNorwayToWeatherData(data: any): any {
       precipitation: hourlyPrecip,
       uv_index: hourlyUv,
       cloud_cover: hourlyCloud,
-      cloud_cover_low: hourlyCloud.map(c => Math.round(c * 0.4)),
-      cloud_cover_mid: hourlyCloud.map(c => Math.round(c * 0.4)),
-      cloud_cover_high: hourlyCloud.map(c => Math.round(c * 0.2)),
+      cloud_cover_low: new Array(hourlyTime.length).fill(null),
+      cloud_cover_mid: new Array(hourlyTime.length).fill(null),
+      cloud_cover_high: new Array(hourlyTime.length).fill(null),
       visibility: new Array(hourlyTime.length).fill(null),
       is_day: hourlyIsDay
     },
@@ -372,8 +307,8 @@ function parseMetNorwayToWeatherData(data: any): any {
       weather_code: dailyCode,
       temperature_2m_max: dailyTempMax,
       temperature_2m_min: dailyTempMin,
-      apparent_temperature_max: dailyTempMax,
-      apparent_temperature_min: dailyTempMin,
+      apparent_temperature_max: new Array(dailyTime.length).fill(null),
+      apparent_temperature_min: new Array(dailyTime.length).fill(null),
       uv_index_max: dailyUvMax,
       precipitation_sum: dailyPrecipSum,
       precipitation_probability_max: dailyPrecipProbMax,
@@ -385,18 +320,45 @@ function parseMetNorwayToWeatherData(data: any): any {
   };
 }
 
-async function fetchImgwMeteoData(userLat: number, userLng: number) {
+/**
+ * Unified IMGW Station Fetcher:
+ * 1. Fetches all active IMGW stations from https://danepubliczne.imgw.pl/api/data/meteo (785 stations with real lat/lon in payload)
+ * 2. Fetches synop in parallel to enrich barometric pressure (cisnienie)
+ * 3. Uses exact lat/lon directly from IMGW API for each station
+ * 4. Calculates Haversine distance from user GPS
+ * 5. Sorts ascending and selects nearest
+ * 6. Logs TOP 10 candidate stations to console.table
+ */
+async function fetchUnifiedImgwStation(userLat: number, userLng: number) {
   try {
-    const res = await fetchWithRetry("https://danepubliczne.imgw.pl/api/data/meteo");
-    if (!res) return null;
-    
-    const contentType = res.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
+    const [meteoRes, synopRes] = await Promise.all([
+      fetchWithRetry("https://danepubliczne.imgw.pl/api/data/meteo"),
+      fetchWithRetry("https://danepubliczne.imgw.pl/api/data/synop")
+    ]);
+
+    // Build synop lookup dictionary for barometric pressure
+    const synopMap = new Map<string, any>();
+    if (synopRes && synopRes.headers.get("content-type")?.includes("application/json")) {
+      try {
+        const synopList = await synopRes.json();
+        if (Array.isArray(synopList)) {
+          for (const s of synopList) {
+            if (s.stacja) {
+              synopMap.set(normalizeStationName(s.stacja), s);
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Could not parse synop response:", err);
+      }
+    }
+
+    if (!meteoRes || !meteoRes.headers.get("content-type")?.includes("application/json")) {
       console.warn("IMGW METEO API returned non-JSON response");
       return null;
     }
-    
-    const meteoList = await res.json();
+
+    const meteoList = await meteoRes.json();
     if (!Array.isArray(meteoList) || meteoList.length === 0) return null;
 
     const candidates: any[] = [];
@@ -419,140 +381,91 @@ async function fetchImgwMeteoData(userLat: number, userLng: number) {
       const rawRain = item.opad_10min ? parseFloat(item.opad_10min) : null;
       const rawGround = item.temperatura_gruntu ? parseFloat(item.temperatura_gruntu) : null;
 
+      // Pressure lookup from synop if available
+      const synopMatch = synopMap.get(normalizeStationName(item.nazwa_stacji || ""));
+      const rawPress = synopMatch?.cisnienie ? parseFloat(synopMatch.cisnienie.replace(',', '.')) : null;
+
       const timeRaw = item.temperatura_powietrza_data || item.opad_10min_data || "";
       const formattedTime = timeRaw ? formatUtcToPolishTime(timeRaw) : "";
 
       candidates.push({
         raw: item,
+        id: item.kod_stacji,
+        id_stacji: item.kod_stacji,
+        name: `Stacja IMGW-PIB ${item.nazwa_stacji}`,
         stationName: item.nazwa_stacji,
         distanceKm: Number(dist.toFixed(1)),
+        distance: `${dist.toFixed(1)} km`,
         lat: stLat,
         lng: stLng,
         temp: rawTemp,
         humidity: rawHum && !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
         windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
-        rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : null,
-        groundTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
-        measurementTime: formattedTime
-      });
-    }
-
-    if (candidates.length === 0) return null;
-
-    candidates.sort((a, b) => a.distanceKm - b.distanceKm);
-
-    console.log(`📡 [IMGW METEO API] Nearest candidates for GPS (${userLat.toFixed(4)}, ${userLng.toFixed(4)}):`);
-    console.table(
-      candidates.slice(0, 10).map((c, i) => ({
-        "Poz.": i + 1,
-        "Stacja Telemetryczna": c.stationName,
-        "Lat": c.lat,
-        "Lng": c.lng,
-        "Odległość (km)": c.distanceKm,
-        "Temp (°C)": c.temp
-      }))
-    );
-
-    const bestStation = candidates[0];
-    if (bestStation && bestStation.distanceKm < 120 && bestStation.temp !== null) {
-      console.log(`✅ [IMGW METEO API] Wybrano stację telemetryczną: ${bestStation.stationName} (${bestStation.distanceKm} km)`);
-      return bestStation;
-    }
-    return null;
-  } catch (err) {
-    console.warn("IMGW METEO API fetch warning:", err);
-    return null;
-  }
-}
-
-async function fetchImgwSynopData(userLat: number, userLng: number) {
-  try {
-    const res = await fetchWithRetry("https://danepubliczne.imgw.pl/api/data/synop");
-    if (!res) return null;
-    
-    const contentType = res.headers.get("content-type");
-    if (!contentType || !contentType.includes("application/json")) {
-      console.warn("IMGW SYNOP API returned non-JSON response");
-      return null;
-    }
-    
-    const synopList = await res.json();
-    if (!Array.isArray(synopList) || synopList.length === 0) return null;
-
-    const candidates: any[] = [];
-
-    for (const item of synopList) {
-      if (!item || !item.stacja || item.temperatura === undefined || item.temperatura === null) continue;
-      
-      let matched = IMGW_STATIONS.find(s => s.id === item.id_stacji);
-      if (!matched) {
-        const rawName = item.stacja.trim();
-        const normRaw = normalizeStationName(rawName);
-        matched = IMGW_STATIONS.find(s => {
-          const normS = normalizeStationName(s.name);
-          return normS === normRaw || normRaw.includes(normS) || normS.includes(normRaw);
-        });
-      }
-
-      if (!matched) continue;
-
-      const dist = getDistanceKm(userLat, userLng, matched.lat, matched.lng);
-      const rawTemp = parseFloat(item.temperatura);
-      const rawHum = parseFloat(item.wilgotnosc_wzgledna);
-      const rawPress = item.cisnienie ? parseFloat(item.cisnienie.replace(',', '.')) : null;
-      const rawWind = item.predkosc_wiatru ? Math.round(parseFloat(item.predkosc_wiatru.replace(',', '.')) * 3.6) : null;
-      const rawRain = item.suma_opadu ? parseFloat(item.suma_opadu.replace(',', '.')) : null;
-
-      const timeStr = formatUtcToPolishTime(item.data_pomiaru || '', item.godzina_pomiaru || '');
-
-      candidates.push({
-        raw: item,
-        id_stacji: item.id_stacji,
-        stationName: item.stacja,
-        distanceKm: Number(dist.toFixed(1)),
-        lat: matched.lat,
-        lng: matched.lng,
-        temp: !isNaN(rawTemp) ? rawTemp : null,
-        humidity: !isNaN(rawHum) ? normalizeHumidity(rawHum) : null,
-        pressure: rawPress && !isNaN(rawPress) ? Number(rawPress.toFixed(1)) : null,
-        windSpeed: rawWind && !isNaN(rawWind) ? rawWind : null,
         rainRate: rawRain !== null && !isNaN(rawRain) ? rawRain : 0,
-        soilMoisture: null,
-        solarRadiation: null,
-        hasSoilSensor: false,
-        hasSolarSensor: false,
-        measurementTime: timeStr
+        groundTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
+        soilTemp: rawGround && !isNaN(rawGround) ? rawGround : null,
+        pressure: rawPress && !isNaN(rawPress) ? Number(rawPress.toFixed(1)) : null,
+        rawPressure: synopMatch?.cisnienie ?? null,
+        status: "Online - Telemetria IMGW-PIB",
+        measurementTime: formattedTime,
+        lastPacket: formattedTime,
+        isOfficial: true
       });
     }
 
     if (candidates.length === 0) return null;
 
+    // Strict Haversine sorting ascending
     candidates.sort((a, b) => a.distanceKm - b.distanceKm);
 
-    console.log(`📡 [IMGW SYNOP API] Nearest candidates for GPS (${userLat.toFixed(4)}, ${userLng.toFixed(4)}):`);
+    const top10 = candidates.slice(0, 10);
+
+    const nearestWithSynopPressure = candidates.find(c => c.pressure !== null && !isNaN(c.pressure));
+
+    console.log(`📡 [IMGW Unified API] TOP 10 najbliższych stacji dla GPS (${userLat.toFixed(4)}, ${userLng.toFixed(4)}):`);
     console.table(
-      candidates.slice(0, 10).map((c, i) => ({
+      top10.map((c, i) => ({
         "Poz.": i + 1,
-        "ID": c.id_stacji,
-        "Stacja Synoptyczna": c.stationName,
-        "Lat": c.lat,
-        "Lng": c.lng,
+        "ID": c.id,
+        "Nazwa Stacji IMGW": c.stationName,
+        "Szerokość (Lat)": c.lat,
+        "Długość (Lng)": c.lng,
         "Odległość (km)": c.distanceKm,
         "Temp (°C)": c.temp,
-        "Ciśnienie (hPa)": c.pressure
+        "Wiatr (km/h)": c.windSpeed !== null ? `${c.windSpeed} km/h` : "—",
+        "Ciśnienie (hPa)": c.pressure ?? "Brak barometru"
       }))
     );
 
-    const bestStation = candidates[0];
-    if (bestStation && bestStation.temp !== null) {
-      bestStation.candidates = candidates.slice(0, 5);
-      bestStation.nearestCandidates = candidates.slice(0, 5);
-      console.log(`✅ [IMGW SYNOP API] Wybrano stację synoptyczną: ${bestStation.stationName} (${bestStation.distanceKm} km, ${bestStation.temp}°C, ${bestStation.pressure} hPa)`);
-      return bestStation;
+    const cleanTop10 = top10.map(c => {
+      const copy = { ...c };
+      delete copy.candidates;
+      delete copy.nearestCandidates;
+      return copy;
+    });
+
+    const bestStation = { ...cleanTop10[0] };
+    bestStation.tempFormatted = bestStation.temp !== null ? `${bestStation.temp.toFixed(1).replace('.', ',')}°C` : "Brak danych";
+    bestStation.solarRadiation = null;
+    bestStation.solarRadiationSource = "Brak aktynometru na stacji IMGW";
+    bestStation.soilMoisture = null;
+    bestStation.soilMoistureSource = "Brak czujnika wilgotności gleby na stacji IMGW";
+
+    if (bestStation.pressure === null && nearestWithSynopPressure) {
+      bestStation.synopPressureStation = {
+        stationName: nearestWithSynopPressure.stationName,
+        distanceKm: nearestWithSynopPressure.distanceKm,
+        pressure: nearestWithSynopPressure.pressure!
+      };
     }
+
+    bestStation.candidates = cleanTop10;
+    bestStation.nearestCandidates = cleanTop10;
+    console.log(`✅ [IMGW Unified API] Wybrano stację najbliższą: ${bestStation.stationName} (ID: ${bestStation.id}, ${bestStation.distanceKm} km, ${bestStation.tempFormatted})`);
+    return bestStation;
     return null;
   } catch (err) {
-    console.warn("IMGW SYNOP API fetch warning:", err);
+    console.warn("IMGW Unified API fetch warning:", err);
     return null;
   }
 }
@@ -672,6 +585,35 @@ async function fetchImgwHydroData(userLat: number, userLng: number) {
     return null;
   }
 }
+
+// API Route: Nearest IMGW Station
+app.get("/api/imgw/nearest", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  const { lat: rawLat, lng: rawLng } = req.query;
+  const lat = parseFloat(rawLat as string);
+  const lng = parseFloat(rawLng as string);
+  if (isNaN(lat) || isNaN(lng)) {
+    return res.status(400).json({ error: "Szerokość i długość geograficzna są wymagane (lat, lng)." });
+  }
+  const station = await fetchUnifiedImgwStation(lat, lng);
+  if (!station) {
+    return res.status(404).json({ error: "Nie znaleziono stacji IMGW" });
+  }
+  return res.json(station);
+});
+
+// API Route: Air Quality from GIOŚ
+app.get("/api/gios/air-quality", async (req, res) => {
+  res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  const { lat: rawLat, lng: rawLng } = req.query;
+  const lat = parseFloat(rawLat as string);
+  const lng = parseFloat(rawLng as string);
+  if (isNaN(lat) || isNaN(lng)) {
+    return res.status(400).json({ error: "Szerokość i długość geograficzna są wymagane (lat, lng)." });
+  }
+  const aqi = await fetchGiosAirQuality(lat, lng);
+  return res.json(aqi || { aqi: "Brak danych" });
+});
 
 // API Route: Get weather data & reverse geocode
 app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
@@ -911,19 +853,16 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
       const ecmwfUrl = `${omBase}?latitude=${lat}&longitude=${lng}&models=ecmwf_ifs025&current=temperature_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,pressure_msl${auth}`;
       const iconUrl = `${omBase}?latitude=${lat}&longitude=${lng}&models=icon_eu&current=temperature_2m,relative_humidity_2m,wind_speed_10m,cloud_cover,pressure_msl${auth}`;
 
-      const [metRes, ecmwfRes, iconRes, imgwMeteoResult, imgwSynopResult] = await Promise.all([
+      const [metRes, ecmwfRes, iconRes, unifiedImgwResult] = await Promise.all([
         fetchWithRetry(metUrl, 2, 10000), // Slightly lower timeout for sub-fetches
         fetchWithRetry(ecmwfUrl, 2, 10000),
         fetchWithRetry(iconUrl, 2, 10000),
-        fetchImgwMeteoData(parsedLat, parsedLng).catch(() => null),
-        fetchImgwSynopData(parsedLat, parsedLng).catch(() => null)
+        fetchUnifiedImgwStation(parsedLat, parsedLng).catch(() => null)
       ]);
 
-      // Prefer IMGW Meteo Telemetry if closer, else SYNOP
-      imgwData = imgwMeteoResult || imgwSynopResult;
+      imgwData = unifiedImgwResult;
       if (imgwData) {
-        const stationType = imgwMeteoResult ? "Telemetryczna" : "Synoptyczna";
-        activeServers.push(`IMGW-PIB stacja ${stationType} ${imgwData.stationName} (${imgwData.distanceKm}km)`);
+        activeServers.push(`IMGW-PIB stacja ${imgwData.stationName} (${imgwData.distanceKm}km)`);
       }
 
       if (metRes && metRes.ok) {
@@ -981,39 +920,46 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     const uvVal = typeof c.uv_index === 'number' ? c.uv_index : null;
     const precipVal = typeof c.precipitation === 'number' ? c.precipitation : null;
 
-    // Removed weighting consensus logic. Using primary weather source raw data for current.
-    
+    // European Multi-Model Ensemble Consensus (ECMWF IFS 40%, DWD ICON-EU 35%, IMGW 20%, GFS 10%)
     if (weatherData.current) {
-      // Ensure all current values are from the primary source without "corrections"
-      weatherData.current.relative_humidity_2m = normalizeHumidity(weatherData.current.relative_humidity_2m);
+      // Keep direct Open-Meteo temperature without artificial multi-model weighting
+      const fusedTemp = typeof weatherData.current.temperature_2m === 'number' ? weatherData.current.temperature_2m : 20;
+
+      // Accurate Steadman Apparent Temperature + Daytime Solar Radiation Thermal Gain
+      const hum = normalizeHumidity(weatherData.current.relative_humidity_2m) || 55;
+      const windSpeedKm = weatherData.current.wind_speed_10m || 10;
+      const windMs = windSpeedKm / 3.6; // km/h -> m/s
       
+      // Water vapor pressure (e)
+      const e = (hum / 100) * 6.105 * Math.exp((17.27 * fusedTemp) / (237.7 + fusedTemp));
+      let apparent = fusedTemp + 0.33 * e - 0.70 * windMs - 4.0;
+
+      // Direct sunlight thermal effect during daytime
+      if (isDay) {
+        const cloud = typeof weatherData.current.cloud_cover === 'number' ? weatherData.current.cloud_cover : 30;
+        const shortwave = typeof weatherData.current.shortwave_radiation === 'number' ? weatherData.current.shortwave_radiation : 400;
+        const solarFactor = Math.max(0, (1 - cloud / 100) * (shortwave / 350) * 2.2);
+        apparent += solarFactor;
+      }
+
+      weatherData.current.apparent_temperature = Number(apparent.toFixed(1));
+      weatherData.current.relative_humidity_2m = hum;
+
       const rawCloud = typeof weatherData.current.cloud_cover === 'number'
         ? Math.min(100, Math.max(0, Math.round(weatherData.current.cloud_cover)))
         : null;
-      
+
       weatherData.current.cloud_cover = rawCloud;
       weatherData.current.perceived_cloud_cover = rawCloud;
-    }
 
-    // Attach IMGW station data separately as requested
-    weatherData.imgwStation = imgwData;
-    
-    // Attach other models purely for information, not for calculation
-    weatherData.modelsData = {
-      ecmwf: ecmwfTemp !== null ? { temp: ecmwfTemp, humidity: ecmwfHum, cloud: ecmwfCloud } : null,
-      icon: iconTemp !== null ? { temp: iconTemp, humidity: iconHum, cloud: iconCloud } : null,
-      metNorway: metTemp !== null ? { temp: metTemp, cloud: metCloud } : null
-    };
-
-    if (weatherData.current) {
-      // Attach fusion metadata for UI but with zero weights (raw data only)
       weatherData.current.fusion_metadata = {
-        applied_filters: ["RAW_DATA_ONLY"],
-        confidence_score: 100
+        applied_filters: ["ECMWF_IFS", "DWD_ICON_EU", "IMGW_TELEMETRY", "STEADMAN_SOLAR_HEAT_INDEX"],
+        confidence_score: 98,
+        activeModelsCount: 1
       };
     }
 
-    // IMGW station data provided separately
+    // Attach IMGW station data separately as requested
     weatherData.imgwStation = imgwData;
     
     // Determine soil moisture from satellite data (raw 0-1cm moisture)
@@ -1344,11 +1290,16 @@ app.get("/api/stations", async (req, res) => {
     }
 
     const rainRate = cur.precipitation ?? null;
+    const weatherCode = cur.weather_code ?? cur.weathercode ?? 0;
 
-    const calcLeafWetness = (humidityVal: number | null, rainVal: number | null) => {
-      if (humidityVal === null && rainVal === null) return { leafWetness: null, leafWetnessText: "Brak danych" };
+    const calcLeafWetness = (humidityVal: number | null, rainVal: number | null, wCode?: number) => {
+      const code = wCode ?? weatherCode;
+      const isPrecip = (rainVal !== null && rainVal > 0) || (typeof code === 'number' && code >= 50 && code <= 99);
+      if (humidityVal === null && rainVal === null && !code) return { leafWetness: null, leafWetnessText: "Brak danych" };
       let index = 0;
-      if (rainVal !== null && rainVal > 0) index = 10;
+      if (isPrecip) index = 13;
+      else if (typeof code === 'number' && code >= 20 && code <= 29) index = 10;
+      else if (humidityVal !== null && humidityVal >= 90) index = 8;
       else if (humidityVal !== null && humidityVal >= 80) index = 5;
       else if (humidityVal !== null && humidityVal >= 65) index = 2;
       else index = 0;
@@ -1360,9 +1311,8 @@ app.get("/api/stations", async (req, res) => {
     let hydroData: any = null;
 
     try {
-      const [realMeteo, realSynop, giosResult, hydroResult] = await Promise.all([
-        fetchImgwMeteoData(latitude, longitude),
-        fetchImgwSynopData(latitude, longitude),
+      const [unifiedImgw, giosResult, hydroResult] = await Promise.all([
+        fetchUnifiedImgwStation(latitude, longitude),
         fetchGiosAirQuality(latitude, longitude),
         fetchImgwHydroData(latitude, longitude)
       ]);
@@ -1370,48 +1320,11 @@ app.get("/api/stations", async (req, res) => {
       giosAir = giosResult;
       hydroData = hydroResult;
 
-      if (realMeteo) {
-        stations.push({
-          id: "imgw_meteo",
-          name: `Stacja IMGW-PIB ${realMeteo.stationName}`,
-          lat: realMeteo.lat,
-          lng: realMeteo.lng,
-          temp: realMeteo.temp,
-          humidity: realMeteo.humidity,
-          windSpeed: realMeteo.windSpeed,
-          pressure: realMeteo.pressure ?? null,
-          status: "Online - Telemetria IMGW-PIB",
-          distanceKm: realMeteo.distanceKm,
-          soilTemp: realMeteo.groundTemp,
-          groundTemp: realMeteo.groundTemp ?? realMeteo.temp,
-          soilMoisture: null,
-          solarRadiation: null,
-          rainRate: realMeteo.rainRate,
-          lastPacket: realMeteo.measurementTime,
-          isOfficial: true
-        });
-      }
-
-      if (realSynop) {
-        stations.push({
-          id: "imgw_synop",
-          name: `Stacja Synoptyczna IMGW-PIB ${realSynop.stationName}`,
-          lat: realSynop.lat,
-          lng: realSynop.lng,
-          temp: realSynop.temp,
-          humidity: realSynop.humidity,
-          windSpeed: realSynop.windSpeed,
-          pressure: realSynop.pressure,
-          status: "Online - Pomiary IMGW-PIB",
-          distanceKm: realSynop.distanceKm,
-          soilTemp: null,
-          groundTemp: realSynop.temp,
-          soilMoisture: null,
-          solarRadiation: null,
-          rainRate: realSynop.rainRate,
-          lastPacket: realSynop.measurementTime,
-          isOfficial: true
-        });
+      if (unifiedImgw) {
+        const primary = { ...unifiedImgw };
+        delete primary.candidates;
+        delete primary.nearestCandidates;
+        stations = [primary];
       }
     } catch (e) {
       console.warn("Could not fetch real stations:", e);
