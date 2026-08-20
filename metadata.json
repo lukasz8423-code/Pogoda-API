@@ -1,11 +1,6 @@
 {
   "name": "Pogoda Lokalna",
-  "description": "Zaawansowana aplikacja pogodowa pobierająca realne dane telemetrii IMGW oraz modele ECMWF/ICON, oferująca precyzyjne prognozy lokalne i alerty synoptyczne.",
-  "requestFramePermissions": [
-    "geolocation",
-    "camera",
-    "compute-pressure"
-  ],
+  "description": "Aplikacja pogodowa na telefon pobierająca realne dane o pogodzie na podstawie lokalizacji, oferująca spersonalizowane analizy i porady asystenta AI.",
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
