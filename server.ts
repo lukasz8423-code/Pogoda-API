@@ -79,7 +79,7 @@ function getDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): 
 // Global in-memory cache for weather and station data to prevent Open-Meteo 429 rate limit issues
 const weatherResponseCache = new Map<string, { data: any; timestamp: number }>();
 const stationResponseCache = new Map<string, { data: any; timestamp: number }>();
-const WEATHER_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes fresh TTL
+const WEATHER_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes fresh TTL
 
 function formatUtcToPolishTime(dateStr: string, hourStr?: string): string {
   try {
@@ -634,9 +634,10 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     return res.status(400).json({ error: "Szerokość i długość geograficzna są wymagane (lat, lng)." });
   }
 
+  const isForce = req.query.force === "true" || req.query.refresh === "true" || req.headers["cache-control"] === "no-cache";
   const geoKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
   const cachedWeather = weatherResponseCache.get(geoKey);
-  if (cachedWeather && (Date.now() - cachedWeather.timestamp < WEATHER_CACHE_TTL_MS)) {
+  if (!isForce && cachedWeather && (Date.now() - cachedWeather.timestamp < WEATHER_CACHE_TTL_MS)) {
     return res.json(cachedWeather.data);
   }
 
@@ -755,8 +756,8 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
               weather_code: [data.forecast.forecastday[0].day.condition.code],
               temperature_2m_max: [data.forecast.forecastday[0].day.maxtemp_c],
               temperature_2m_min: [data.forecast.forecastday[0].day.mintemp_c],
-              apparent_temperature_max: [data.forecast.forecastday[0].day.maxtemp_c], // Fallback
-              apparent_temperature_min: [data.forecast.forecastday[0].day.mintemp_c], // Fallback
+              apparent_temperature_max: [null],
+              apparent_temperature_min: [null],
               uv_index_max: [data.forecast.forecastday[0].day.uv],
               precipitation_sum: [data.forecast.forecastday[0].day.totalprecip_mm],
               precipitation_probability_max: [data.forecast.forecastday[0].day.daily_chance_of_rain],
@@ -920,30 +921,8 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     const uvVal = typeof c.uv_index === 'number' ? c.uv_index : null;
     const precipVal = typeof c.precipitation === 'number' ? c.precipitation : null;
 
-    // European Multi-Model Ensemble Consensus (ECMWF IFS 40%, DWD ICON-EU 35%, IMGW 20%, GFS 10%)
     if (weatherData.current) {
-      // Keep direct Open-Meteo temperature without artificial multi-model weighting
-      const fusedTemp = typeof weatherData.current.temperature_2m === 'number' ? weatherData.current.temperature_2m : 20;
-
-      // Accurate Steadman Apparent Temperature + Daytime Solar Radiation Thermal Gain
-      const hum = normalizeHumidity(weatherData.current.relative_humidity_2m) || 55;
-      const windSpeedKm = weatherData.current.wind_speed_10m || 10;
-      const windMs = windSpeedKm / 3.6; // km/h -> m/s
-      
-      // Water vapor pressure (e)
-      const e = (hum / 100) * 6.105 * Math.exp((17.27 * fusedTemp) / (237.7 + fusedTemp));
-      let apparent = fusedTemp + 0.33 * e - 0.70 * windMs - 4.0;
-
-      // Direct sunlight thermal effect during daytime
-      if (isDay) {
-        const cloud = typeof weatherData.current.cloud_cover === 'number' ? weatherData.current.cloud_cover : 30;
-        const shortwave = typeof weatherData.current.shortwave_radiation === 'number' ? weatherData.current.shortwave_radiation : 400;
-        const solarFactor = Math.max(0, (1 - cloud / 100) * (shortwave / 350) * 2.2);
-        apparent += solarFactor;
-      }
-
-      weatherData.current.apparent_temperature = Number(apparent.toFixed(1));
-      weatherData.current.relative_humidity_2m = hum;
+      weatherData.current.relative_humidity_2m = normalizeHumidity(weatherData.current.relative_humidity_2m);
 
       const rawCloud = typeof weatherData.current.cloud_cover === 'number'
         ? Math.min(100, Math.max(0, Math.round(weatherData.current.cloud_cover)))
@@ -953,8 +932,7 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
       weatherData.current.perceived_cloud_cover = rawCloud;
 
       weatherData.current.fusion_metadata = {
-        applied_filters: ["ECMWF_IFS", "DWD_ICON_EU", "IMGW_TELEMETRY", "STEADMAN_SOLAR_HEAT_INDEX"],
-        confidence_score: 98,
+        applied_filters: ["ECMWF_IFS", "DWD_ICON_EU", "IMGW_TELEMETRY"],
         activeModelsCount: 1
       };
     }
