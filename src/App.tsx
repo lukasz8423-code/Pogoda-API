@@ -86,6 +86,14 @@ export default function App() {
         const savedWeatherStr = localStorage.getItem("aura_last_weather");
         const savedMethodStr = localStorage.getItem("aura_last_method");
         
+        console.log("💾 [Storage Telemetry -> Load Cache]", {
+          hasSavedCoords: !!savedCoordsStr,
+          savedCoordsStr,
+          savedCityStr,
+          savedMethodStr,
+          hasSavedWeather: !!savedWeatherStr
+        });
+
         if (savedCoordsStr && savedWeatherStr) {
           const parsedCoords = JSON.parse(savedCoordsStr);
           const isManual = savedMethodStr === "manual";
@@ -106,7 +114,12 @@ export default function App() {
                               (!savedMethodStr && (savedCityStr === "Gdańsk" || savedCityStr === "Łódź" || savedCityStr === "Nieznana lokalizacja" || savedCityStr === "Szanghaj" || savedCityStr === "Shanghai"));
 
           if (!isAllowed || isIpArtifact) {
-            console.warn("🚨 [App] Purging stale, foreign or IP fallback cache:", savedCityStr, parsedCoords);
+            console.warn("🚨 [Storage Telemetry -> Purge Stale]", {
+              reason: !isAllowed ? "Coordinates not allowed/outside bounds" : "IP artifact fallback",
+              city: savedCityStr,
+              coords: parsedCoords,
+              method: savedMethodStr
+            });
             try {
               localStorage.removeItem("aura_last_coords");
               localStorage.removeItem("aura_last_city");
@@ -125,6 +138,11 @@ export default function App() {
               setWeatherData(parsedWeather);
               updateGeoDiagnostic(parsedCoords.lat, parsedCoords.lng, savedCityStr || parsedWeather.city, savedMethodStr || (isManual ? "Ręczny wybór" : "GPS"));
               hasCachedData = true;
+              console.log("✅ [Storage Telemetry -> Cache Applied]", {
+                city: savedCityStr || parsedWeather.city,
+                coords: parsedCoords,
+                method: savedMethodStr
+              });
             }
           }
         }
@@ -512,11 +530,20 @@ export default function App() {
 
       // Save to localStorage for instant startup next time
       try {
+        const methodStr = isManual ? "manual" : "gps";
+        console.log("💾 [Storage Telemetry -> Save Location State]", {
+          location: "src/App.tsx:fetchWeather",
+          lat,
+          lng,
+          city: data.city,
+          method: methodStr,
+          syncTime: Date.now()
+        });
         localStorage.setItem("aura_last_coords", JSON.stringify({ lat, lng }));
         localStorage.setItem("aura_last_city", data.city);
         localStorage.setItem("aura_last_weather", JSON.stringify(data));
         localStorage.setItem("aura_last_sync_time", Date.now().toString());
-        localStorage.setItem("aura_last_method", isManual ? "manual" : "gps");
+        localStorage.setItem("aura_last_method", methodStr);
       } catch (e) {
         console.warn("Could not save to localStorage", e);
       }

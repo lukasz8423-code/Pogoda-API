@@ -488,7 +488,8 @@ export interface LeafWetnessResult {
 
 /**
  * Calculates Leaf Wetness on the standard 0 to 15 agrometeorological scale (LWD index).
- * Evaluates real precipitation, relative humidity, air temperature and dew point depression.
+ * Evaluates real precipitation, relative humidity, air temperature, dew point depression,
+ * night-time radiative canopy cooling, wind speed, and WMO weather codes.
  */
 export function calculateLeafWetness(
   precipitation: number | null | undefined,
@@ -504,6 +505,8 @@ export function calculateLeafWetness(
   const h = typeof humidity === "number" && !isNaN(humidity) ? Math.max(0, Math.min(100, humidity)) : 50;
   const t = typeof temperature === "number" && !isNaN(temperature) ? temperature : 15;
   const dp = dewPoint !== undefined && dewPoint !== null ? dewPoint : calculateDewPoint(t, h);
+  const safeWind = typeof windSpeed === "number" && !isNaN(windSpeed) ? Math.max(0, windSpeed) : 10;
+  const safeIsDay = isDay === 0 ? 0 : 1;
 
   let score = 0;
   let level: "dry" | "trace" | "light_dew" | "heavy_dew" | "rain_saturated" = "dry";
@@ -511,56 +514,115 @@ export function calculateLeafWetness(
   let description = "Brak zwilżenia blaszki liściowej. Optymalne okno na zabiegi ochronne i opryski polowe.";
   let riskStatus: "optimal" | "moderate" | "high_pathogen_risk" | "no_spraying" = "optimal";
 
-  // WMO precipitation codes: 50-99 (drizzle, rain, snow, showers, thunderstorm)
+  // WMO precipitation codes (50-99: drizzle, rain, snow, showers, thunderstorm)
   const isPrecipCode = typeof weatherCode === "number" && weatherCode >= 50 && weatherCode <= 99;
-  // WMO recent precipitation codes: 20-29 (recent drizzle, rain, snow)
+  // WMO recent precipitation codes (20-29: recent precipitation)
   const isRecentPrecipCode = typeof weatherCode === "number" && weatherCode >= 20 && weatherCode <= 29;
+  // WMO fog codes (45, 48: fog with rime / depositing fog)
+  const isFogCode = typeof weatherCode === "number" && (weatherCode === 45 || weatherCode === 48);
 
+  // 1. PRIORITY: Active measured precipitation
   if (p > 0.05) {
     score = Math.min(15, Math.max(12, Math.round(12 + Math.min(3, p * 2))));
     level = "rain_saturated";
     title = `Zwilżenie deszczowe (${score}/15)`;
     description = `Aktywne opady deszczu (${p} mm). Całkowite nasycenie blaszki liściowej – zakaz wykonywania oprysków zmywalnych.`;
     riskStatus = "no_spraying";
-  } else if (p > 0 || isRecentPrecipCode) {
+  } else if (p > 0) {
+    score = 11;
+    level = "rain_saturated";
+    title = `Śladowy opad deszczu (${score}/15)`;
+    description = `Zarejestrowano śladowe opady deszczu (${p} mm). Liście mokre, odradza się zabiegi zmywalne.`;
+    riskStatus = "no_spraying";
+  } else if (isPrecipCode) {
     score = 10;
     level = "heavy_dew";
-    title = `Mokry liść po opadzie (${score}/15)`;
-    description = "Blaszka liściowa wilgotna po śladowym opadzie deszczu lub mżawce. Unikaj zabiegów zmywalnych.";
+    title = `Mokry liść / mżawka (${score}/15)`;
+    description = "Blaszka liściowa wilgotna pod wpływem mżawki lub przelotnego opadu. Unikaj zabiegów zmywalnych.";
     riskStatus = "high_pathogen_risk";
   } else {
-    const dewDepression = dp !== null ? t - dp : (100 - h) / 5;
+    // 2. CONDENSATION & DEW MODEL (Probabilistic-physical microclimate model)
+    const rawDewDepression = dp !== null ? Math.max(0, t - dp) : Math.max(0, (100 - h) / 5);
 
-    if (h >= 95 || dewDepression <= 0.6) {
-      score = Math.min(11, Math.max(8, Math.round(8 + (h - 95) * 0.6)));
+    // Radiative canopy cooling factor:
+    // At night (isDay === 0), vegetation surface cools ~1.5 - 3.0°C below 2m air temperature under calm skies.
+    // Higher wind speed mixes canopy air with 2m air, suppressing the radiative inversion and drying leaves.
+    const windCalmFactor = Math.max(0.15, 1 - Math.min(1, safeWind / 28));
+    const nightRadiativeDrop = safeIsDay === 0 ? 2.3 * windCalmFactor : 0.4 * windCalmFactor;
+    const effectiveDewDepression = Math.max(0, rawDewDepression - nightRadiativeDrop);
+
+    // Calculate raw condensation score from effective dew depression and humidity
+    let calculatedScore = 0;
+
+    if (effectiveDewDepression <= 0.5 || h >= 95 || (isFogCode && h >= 88)) {
+      // Obfita rosa / nasycenie kondensacyjne
+      const intensity = effectiveDewDepression <= 0.2 ? 11 : effectiveDewDepression <= 0.4 ? 10 : 9;
+      calculatedScore = Math.min(11, Math.max(8, intensity));
+    } else if (effectiveDewDepression <= 1.8 || h >= 84 || (isFogCode && h >= 75)) {
+      // Lekka rosa / wilgotny liść
+      const subScore = Math.round(7 - ((effectiveDewDepression - 0.5) / 1.3) * 3);
+      calculatedScore = Math.min(7, Math.max(4, subScore));
+    } else if (effectiveDewDepression <= 3.8 || (safeIsDay === 0 && h >= 68) || (safeIsDay === 1 && h >= 74)) {
+      // Śladowa wilgoć / możliwa rosa przygruntowa
+      const subScore = effectiveDewDepression <= 2.8 || h >= 75 ? 3 : 2;
+      calculatedScore = Math.min(3, Math.max(2, subScore));
+    } else if (effectiveDewDepression <= 5.0 && safeIsDay === 0 && safeWind <= 12) {
+      // Minimalna wilgoć nocna w zacisznych mikrozagłębieniach
+      calculatedScore = 1;
+    } else {
+      // Całkowicie sucho
+      calculatedScore = 0;
+    }
+
+    // Boost if recent precipitation code is active and humidity is high
+    if (isRecentPrecipCode && calculatedScore < 6 && h >= 70) {
+      calculatedScore = Math.min(8, calculatedScore + 3);
+    }
+
+    // Wind dispersion penalty for strong drying winds (> 20 km/h)
+    if (safeWind > 20 && calculatedScore > 0 && calculatedScore <= 7) {
+      calculatedScore = Math.max(0, calculatedScore - 1);
+    }
+
+    score = Math.min(15, Math.max(0, calculatedScore));
+
+    // Assign UI categories, titles and descriptions according to standard 0-15 LWD scale
+    if (score >= 12) {
+      level = "rain_saturated";
+      title = `Mokry liść (${score}/15)`;
+      description = "Wysokie nasycenie wilgocią. Zakaz zabiegów zmywalnych ze względu na ryzyko spłukania preparatu.";
+      riskStatus = "no_spraying";
+    } else if (score >= 8) {
       level = "heavy_dew";
-      title = `Obfita rosa poranna (${score}/15)`;
-      description = "Długotrwałe zwilżenie kondensacyjne. Wysoka presja chorób grzybowych (parch, mączniak, szara pleśń).";
+      title = safeIsDay === 0 ? `Obfita rosa nocna (${score}/15)` : `Obfita rosa poranna (${score}/15)`;
+      description = "Długotrwałe zwilżenie kondensacyjne blaszki liściowej. Wysoka presja chorób grzybowych (parch, mączniak, szara pleśń).";
       riskStatus = "high_pathogen_risk";
-    } else if (h >= 86 || dewDepression <= 1.8) {
-      score = Math.min(7, Math.max(4, Math.round(4 + (h - 86) * 0.4)));
+    } else if (score >= 4) {
       level = "light_dew";
-      title = `Lekka rosa / mgła (${score}/15)`;
-      description = "Umiarkowane zwilżenie powierzchni liści. Zalecana ostrożność przy opryskach fungicydowych.";
+      title = `Lekka rosa / wilgotny liść (${score}/15)`;
+      description = "Umiarkowane zwilżenie powierzchni liści. Zalecana ostrożność przy opryskach fungicydowych i dolistnych.";
       riskStatus = "moderate";
-    } else if (h >= 78) {
-      score = Math.min(3, Math.max(1, Math.round(1 + (h - 78) * 0.25)));
+    } else if (score >= 2) {
       level = "trace";
-      title = `Śladowa wilgoć (${score}/15)`;
-      description = "Początek schnięcia lub znikoma wilgoć powierzchniowa. Rośliny szybko wysychają.";
+      title = safeIsDay === 0 ? `Możliwa rosa nocna (${score}/15)` : `Śladowa wilgoć / możliwa rosa (${score}/15)`;
+      description = "Warunki sprzyjające kondensacji przy gruncie lub początek schnięcia roślin. Niewielka wilgoć na trawie i dolnych liściach.";
+      riskStatus = "optimal";
+    } else if (score === 1) {
+      level = "dry";
+      title = `Prawie suchy liść (${score}/15)`;
+      description = "Pojedyncze krople w mikrozagłębieniach terenu, szybko ustępujące. Bardzo dobre warunki do zabiegów agro.";
       riskStatus = "optimal";
     } else {
-      score = 0;
       level = "dry";
       title = "Suchy liść (0/15)";
-      description = "Blaszka liściowa całkowicie sucha. Warunki idealne do wchłaniania nawozów dolistnych i środków ochrony roślin.";
+      description = "Blaszka liściowa całkowicie sucha. Optymalne okno na wchłaniania nawozów dolistnych i zabiegi ochronne.";
       riskStatus = "optimal";
     }
   }
 
   const source = stationName
     ? `Fizyczny model kondensacji Agro (stacja IMGW ${stationName})`
-    : "Fizyczny model kondensacji Agro (RH / Punkt Rosy / Opad)";
+    : "Fizyczny model kondensacji Agro (RH / Depresja Punktu Rosy / Radiacja)";
 
   return {
     score,

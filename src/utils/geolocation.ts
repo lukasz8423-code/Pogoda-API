@@ -116,11 +116,36 @@ export async function detectUserLocation(
         finishError(new Error(`Timeout geolokalizacji w przeglądarce (${timeout}ms)`));
       }, timeout + 500);
 
-      console.log("📍 [Geo] Requesting Browser GPS Geolocation...");
+      const geoOptions: PositionOptions = {
+        enableHighAccuracy: highAccuracy,
+        timeout: timeout,
+        maximumAge: 0 // Always enforce maximumAge: 0 to prevent browser from returning stale cached positions
+      };
+
+      console.log("📍 [Geo Telemetry -> Request]", {
+        source: "navigator.geolocation.getCurrentPosition",
+        platform: Capacitor.isNativePlatform() ? "Capacitor Native Android" : "Browser Web / GLS",
+        enableHighAccuracy: geoOptions.enableHighAccuracy,
+        timeout: geoOptions.timeout,
+        maximumAge: geoOptions.maximumAge,
+        timestamp: new Date().toISOString()
+      });
+
       try {
         navigator.geolocation.getCurrentPosition(
           (pos) => {
-            console.log("📍 [Geo RAW Browser] lat:", pos.coords.latitude, "lng:", pos.coords.longitude, "accuracy:", pos.coords.accuracy);
+            console.log("📍 [Geo Telemetry -> Result Success]", {
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude,
+              accuracy: pos.coords.accuracy,
+              altitude: pos.coords.altitude,
+              heading: pos.coords.heading,
+              speed: pos.coords.speed,
+              posTimestamp: pos.timestamp,
+              now: Date.now(),
+              ageMs: Date.now() - pos.timestamp,
+              source: "navigator.geolocation"
+            });
             finishSuccess({
               latitude: pos.coords.latitude,
               longitude: pos.coords.longitude,
@@ -128,14 +153,16 @@ export async function detectUserLocation(
             });
           },
           (err) => {
-            console.warn("⚠️ [Geo Browser Error]", err.code, err.message);
+            console.warn("⚠️ [Geo Telemetry -> Result Error]", {
+              code: err.code,
+              message: err.message,
+              PERMISSION_DENIED: err.code === 1,
+              POSITION_UNAVAILABLE: err.code === 2,
+              TIMEOUT: err.code === 3
+            });
             finishError(err);
           },
-          {
-            enableHighAccuracy: highAccuracy,
-            timeout: timeout,
-            maximumAge: highAccuracy ? 0 : 30000
-          }
+          geoOptions
         );
       } catch (callErr) {
         finishError(callErr);
