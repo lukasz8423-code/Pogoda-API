@@ -650,11 +650,10 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     return { cloudCover, label, icon };
   };
 
-  const luxCloudRes = sensorLux !== null ? calculateLuxCloudCover(sensorLux, isDay, measurementLocation) : null;
 
   let wyswietlaneZachmurzenie = manualCloudCover !== null 
     ? manualCloudCover 
-    : (luxCloudRes !== null ? luxCloudRes.cloudCover : currentCloudCover);
+    : currentCloudCover;
 
   const calibratedNext24Hours = useMemo(() => {
     return next24Hours.map((hour, idx) => {
@@ -819,8 +818,9 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   );
 
   const isPrecipitatingOrStorm = currentPrecipitation > 0.05 || (currentWeatherMeta.code >= 50 && currentWeatherMeta.code <= 99);
-  let displayOpis = (luxCloudRes !== null && manualCloudCover === null && !isPrecipitatingOrStorm) ? luxCloudRes.label : currentWeatherMeta.text;
-  let displayIkonka = (luxCloudRes !== null && manualCloudCover === null && !isPrecipitatingOrStorm) ? luxCloudRes.icon : currentWeatherMeta.emoji;
+  // Removed luxCloudRes usage as requested
+  let displayOpis = currentWeatherMeta.text;
+  let displayIkonka = currentWeatherMeta.emoji;
 
   const lowCloud = hourly.cloud_cover_low?.[currentIdx] ?? current?.cloud_cover_low ?? 0;
   const midCloud = hourly.cloud_cover_mid?.[currentIdx] ?? current?.cloud_cover_mid ?? 0;
