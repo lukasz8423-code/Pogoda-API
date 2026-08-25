@@ -50,7 +50,11 @@ export default function WeatherSkeleton({ statusMessage = "Uruchamianie...", onC
           </button>
           <button
             onClick={() => {
-              try { localStorage.clear(); } catch(e) {}
+              try {
+                localStorage.removeItem("aura_last_weather");
+                localStorage.removeItem("aura_last_sync_time");
+                localStorage.removeItem("aura_last_method");
+              } catch(e) {}
               window.location.reload();
             }}
             className="text-[11px] text-slate-500 hover:text-slate-400 underline"

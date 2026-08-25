@@ -44,97 +44,197 @@ export default function IntroScreen({ onLocationSelected, isLoading, initialMess
       setIsSearching(true);
       
       try {
-        let mappedResults: SearchResult[] = [];
+        const normQuery = query.toLowerCase();
+        const candidateList: Array<{
+          name: string;
+          lat: number;
+          lng: number;
+          rawName: string;
+          subLabel?: string;
+          isPoland: boolean;
+          population: number;
+          isExactMatch: boolean;
+        }> = [];
 
-        // 1. Try Nominatim (OpenStreetMap) directly
-        try {
-          console.log("🔍 [City Search] Attempting Nominatim API search...");
-          const res = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=10&countrycodes=pl`, {
-            headers: {
-              'Accept-Language': 'pl'
+        // 1. Query Open-Meteo Geocoding API with 3.5s timeout
+        const omPromise = (async () => {
+          try {
+            const omGeoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=pl&format=json`;
+            const omController = new AbortController();
+            const omTimeout = setTimeout(() => omController.abort(), 3500);
+            const omGeoRes = await fetch(omGeoUrl, { signal: omController.signal });
+            clearTimeout(omTimeout);
+
+            if (omGeoRes.ok) {
+              const omGeoData = await omGeoRes.json();
+              if (omGeoData.results && Array.isArray(omGeoData.results)) {
+                return omGeoData.results;
+              }
             }
+          } catch (e) {
+            console.warn("🔍 [City Search] Open-Meteo fetch notice:", e);
+          }
+          return [];
+        })();
+
+        // 2. Query Nominatim API with 3.5s timeout & Polish country priority
+        const nomPromise = (async () => {
+          try {
+            const nomUrl = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=10&countrycodes=pl`;
+            const nomController = new AbortController();
+            const nomTimeout = setTimeout(() => nomController.abort(), 3500);
+            const res = await fetch(nomUrl, {
+              headers: {
+                'Accept-Language': 'pl'
+              },
+              signal: nomController.signal
+            });
+            clearTimeout(nomTimeout);
+
+            if (res.ok) {
+              const data = await res.json();
+              if (Array.isArray(data) && data.length > 0) {
+                return data;
+              }
+            }
+          } catch (e) {
+            console.warn("🔍 [City Search] Nominatim fetch notice:", e);
+          }
+          return [];
+        })();
+
+        // Execute both concurrently
+        const [omResults, nomResults] = await Promise.all([omPromise, nomPromise]);
+
+        // Process Open-Meteo results
+        for (const item of omResults) {
+          const lat = Number(item.latitude);
+          const lng = Number(item.longitude);
+          if (isNaN(lat) || isNaN(lng)) continue;
+
+          const adminParts: string[] = [];
+          if (item.admin3 && item.admin3.toLowerCase() !== item.name.toLowerCase()) {
+            adminParts.push(item.admin3.replace(/^Gmina\s+/i, 'gm. '));
+          }
+          if (item.admin2) {
+            adminParts.push(item.admin2.replace(/^Powiat\s+/i, 'pow. '));
+          }
+          if (item.admin1) {
+            const a1 = item.admin1.replace(/^Województwo\s+/i, 'woj. ');
+            adminParts.push(a1.startsWith('woj.') ? a1 : `woj. ${a1}`);
+          }
+
+          const subLabel = adminParts.join(' • ');
+          const displayName = subLabel ? `${item.name} (${subLabel})` : item.name;
+          const countryCode = (item.country_code || '').toLowerCase();
+          const inPoland = countryCode === 'pl' || (lat >= 48.0 && lat <= 56.0 && lng >= 13.0 && lng <= 25.5);
+          const exact = item.name.toLowerCase() === normQuery;
+
+          candidateList.push({
+            name: displayName,
+            lat,
+            lng,
+            rawName: item.name,
+            subLabel,
+            isPoland: inPoland,
+            population: Number(item.population) || 0,
+            isExactMatch: exact
           });
-          if (res.ok) {
-            const data = await res.json();
-            if (Array.isArray(data) && data.length > 0) {
-              mappedResults = data.map((item: any) => {
-                const lat = Number(item.lat);
-                const lng = Number(item.lon);
-                
-                const address = item.address || {};
-                const mainLocality = address.village || address.town || address.city || address.hamlet || address.locality || address.suburb || item.display_name.split(',')[0];
-
-                const adminDetails: string[] = [];
-                if (address.municipality) {
-                  const m = address.municipality.replace(/^gmina\s+/i, '');
-                  adminDetails.push(`gm. ${m}`);
-                }
-                if (address.county) {
-                  const c = address.county.replace(/^powiat\s+/i, '');
-                  adminDetails.push(`pow. ${c}`);
-                }
-                if (address.state) {
-                  const s = address.state.replace(/^województwo\s+/i, '');
-                  adminDetails.push(`woj. ${s}`);
-                }
-
-                const subLabel = adminDetails.join(' • ');
-                const displayName = subLabel ? `${mainLocality} (${subLabel})` : item.display_name;
-                
-                return {
-                  name: displayName,
-                  lat,
-                  lng,
-                  rawName: mainLocality,
-                  subLabel
-                };
-              });
-              console.log("🔍 [City Search Diagnostic]", { provider: "Nominatim", count: mappedResults.length, query });
-            }
-          }
-        } catch (backendErr) {
-          console.warn("🔍 [City Search] Nominatim API error, falling back to Open-Meteo geocoding:", backendErr);
         }
 
-        // 2. Direct Open-Meteo Geocoding API (For Native APK or Web fallback)
-        if (mappedResults.length === 0) {
-          const omGeoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=10&language=pl&format=json`;
-          console.log("🔍 [City Search] Direct Open-Meteo Geocoding URL:", omGeoUrl);
-          
-          const omGeoRes = await fetch(omGeoUrl);
-          if (omGeoRes.ok) {
-            const omGeoData = await omGeoRes.json();
-            if (omGeoData.results && Array.isArray(omGeoData.results)) {
-              mappedResults = omGeoData.results.map((item: any) => {
-                const adminParts: string[] = [];
-                if (item.admin3) adminParts.push(item.admin3.replace(/^Gmina\s+/i, 'gm. '));
-                if (item.admin2) adminParts.push(item.admin2.replace(/^Powiat\s+/i, 'pow. '));
-                if (item.admin1) adminParts.push(item.admin1.startsWith('woj.') ? item.admin1 : `woj. ${item.admin1}`);
+        // Process Nominatim results
+        for (const item of nomResults) {
+          const lat = Number(item.lat);
+          const lng = Number(item.lon);
+          if (isNaN(lat) || isNaN(lng)) continue;
 
-                const subLabel = adminParts.join(' • ');
-                const displayName = subLabel ? `${item.name} (${subLabel})` : item.name;
-                
-                return {
-                  name: displayName,
-                  lat: Number(item.latitude),
-                  lng: Number(item.longitude),
-                  rawName: item.name,
-                  subLabel
-                };
-              });
-              console.log("🔍 [City Search Diagnostic]", { provider: "Open-Meteo", count: mappedResults.length, query });
-            }
+          const address = item.address || {};
+          const mainLocality = address.village || address.town || address.city || address.hamlet || address.locality || address.suburb || item.display_name.split(',')[0].trim();
+
+          const adminDetails: string[] = [];
+          if (address.municipality && address.municipality.toLowerCase() !== mainLocality.toLowerCase()) {
+            adminDetails.push(`gm. ${address.municipality.replace(/^gmina\s+/i, '')}`);
+          }
+          if (address.county) {
+            adminDetails.push(`pow. ${address.county.replace(/^powiat\s+/i, '')}`);
+          }
+          if (address.state) {
+            adminDetails.push(`woj. ${address.state.replace(/^województwo\s+/i, '')}`);
+          }
+
+          const subLabel = adminDetails.join(' • ');
+          const displayName = subLabel ? `${mainLocality} (${subLabel})` : item.display_name;
+          const inPoland = (address.country_code || '').toLowerCase() === 'pl' || (lat >= 48.0 && lat <= 56.0 && lng >= 13.0 && lng <= 25.5);
+          const exact = mainLocality.toLowerCase() === normQuery;
+
+          candidateList.push({
+            name: displayName,
+            lat,
+            lng,
+            rawName: mainLocality,
+            subLabel,
+            isPoland: inPoland,
+            population: 0,
+            isExactMatch: exact
+          });
+        }
+
+        // Deduplicate items that are geographically close (< 4km) and share the same rawName
+        const deduplicated: typeof candidateList = [];
+        for (const cand of candidateList) {
+          const alreadyExists = deduplicated.some(d => {
+            const dist = Math.hypot(d.lat - cand.lat, d.lng - cand.lng);
+            return dist < 0.04 && d.rawName.toLowerCase() === cand.rawName.toLowerCase();
+          });
+          if (!alreadyExists) {
+            deduplicated.push(cand);
           }
         }
 
-        if (mappedResults.length > 0) {
-          const valid = mappedResults.filter(r => !isNaN(r.lat) && !isNaN(r.lng));
-          setSearchResults(valid);
+        // Sort results:
+        // 1. Exact name match first
+        // 2. Starts with search query next
+        // 3. Poland locations preferred
+        // 4. Higher population first
+        deduplicated.sort((a, b) => {
+          const aExact = a.isExactMatch ? 1 : 0;
+          const bExact = b.isExactMatch ? 1 : 0;
+          if (aExact !== bExact) return bExact - aExact;
+
+          const aStarts = a.rawName.toLowerCase().startsWith(normQuery) ? 1 : 0;
+          const bStarts = b.rawName.toLowerCase().startsWith(normQuery) ? 1 : 0;
+          if (aStarts !== bStarts) return bStarts - aStarts;
+
+          const aPL = a.isPoland ? 1 : 0;
+          const bPL = b.isPoland ? 1 : 0;
+          if (aPL !== bPL) return bPL - aPL;
+
+          return b.population - a.population;
+        });
+
+        console.log("🔍 [City Search Diagnostic]", {
+          query,
+          candidates: candidateList.length,
+          deduplicated: deduplicated.length,
+          topMatch: deduplicated[0]?.name
+        });
+
+        if (deduplicated.length > 0) {
+          setSearchResults(
+            deduplicated.map(d => ({
+              name: d.name,
+              lat: d.lat,
+              lng: d.lng,
+              rawName: d.rawName,
+              subLabel: d.subLabel
+            }))
+          );
         } else {
           setSearchResults([]);
         }
       } catch (err: any) {
         console.error("🔍 [City Search] Search failed with exception:", err);
+        setSearchResults([]);
       } finally {
         setIsSearching(false);
       }

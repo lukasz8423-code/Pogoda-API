@@ -57,61 +57,144 @@ export default function WeatherError({
     }
     setIsSearching(true);
     try {
-      // 1. Try Nominatim
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=6&countrycodes=pl`,
-        { headers: { "Accept-Language": "pl" } }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          const results = data.map((item: any) => {
-            const address = item.address || {};
-            const mainLocality = address.village || address.town || address.city || address.hamlet || address.locality || item.display_name.split(',')[0];
-            const adminDetails: string[] = [];
-            if (address.municipality) adminDetails.push(`gm. ${address.municipality.replace(/^gmina\s+/i, '')}`);
-            if (address.county) adminDetails.push(`pow. ${address.county.replace(/^powiat\s+/i, '')}`);
-            if (address.state) adminDetails.push(`woj. ${address.state.replace(/^województwo\s+/i, '')}`);
+      const normQuery = q.toLowerCase();
+      const candidateList: Array<{
+        name: string;
+        lat: number;
+        lng: number;
+        rawName: string;
+        subLabel?: string;
+        isPoland: boolean;
+        population: number;
+        isExactMatch: boolean;
+      }> = [];
 
-            const subLabel = adminDetails.join(' • ');
-            return {
-              name: subLabel ? `${mainLocality} (${subLabel})` : mainLocality,
-              lat: parseFloat(item.lat),
-              lng: parseFloat(item.lon),
-            };
-          }).filter(r => !isNaN(r.lat) && !isNaN(r.lng));
+      // 1. Open-Meteo Geocoding
+      const omPromise = (async () => {
+        try {
+          const omRes = await fetch(
+            `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=10&language=pl&format=json`
+          );
+          if (omRes.ok) {
+            const omData = await omRes.json();
+            return omData.results || [];
+          }
+        } catch (e) {}
+        return [];
+      })();
 
-          setSearchResults(results);
-          setIsSearching(false);
-          return;
+      // 2. Nominatim
+      const nomPromise = (async () => {
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=10&countrycodes=pl`,
+            { headers: { "Accept-Language": "pl" } }
+          );
+          if (res.ok) {
+            const data = await res.json();
+            if (Array.isArray(data)) return data;
+          }
+        } catch (e) {}
+        return [];
+      })();
+
+      const [omResults, nomResults] = await Promise.all([omPromise, nomPromise]);
+
+      for (const item of omResults) {
+        const lat = Number(item.latitude);
+        const lng = Number(item.longitude);
+        if (isNaN(lat) || isNaN(lng)) continue;
+
+        const adminParts: string[] = [];
+        if (item.admin3 && item.admin3.toLowerCase() !== item.name.toLowerCase()) {
+          adminParts.push(item.admin3.replace(/^Gmina\s+/i, 'gm. '));
+        }
+        if (item.admin2) adminParts.push(item.admin2.replace(/^Powiat\s+/i, 'pow. '));
+        if (item.admin1) {
+          const a1 = item.admin1.replace(/^Województwo\s+/i, 'woj. ');
+          adminParts.push(a1.startsWith('woj.') ? a1 : `woj. ${a1}`);
+        }
+
+        const subLabel = adminParts.join(' • ');
+        const displayName = subLabel ? `${item.name} (${subLabel})` : item.name;
+        const countryCode = (item.country_code || '').toLowerCase();
+        const inPoland = countryCode === 'pl' || (lat >= 48.0 && lat <= 56.0 && lng >= 13.0 && lng <= 25.5);
+        const exact = item.name.toLowerCase() === normQuery;
+
+        candidateList.push({
+          name: displayName,
+          lat,
+          lng,
+          rawName: item.name,
+          subLabel,
+          isPoland: inPoland,
+          population: Number(item.population) || 0,
+          isExactMatch: exact
+        });
+      }
+
+      for (const item of nomResults) {
+        const lat = Number(item.lat);
+        const lng = Number(item.lon);
+        if (isNaN(lat) || isNaN(lng)) continue;
+
+        const address = item.address || {};
+        const mainLocality = address.village || address.town || address.city || address.hamlet || address.locality || item.display_name.split(',')[0].trim();
+        const adminDetails: string[] = [];
+        if (address.municipality && address.municipality.toLowerCase() !== mainLocality.toLowerCase()) {
+          adminDetails.push(`gm. ${address.municipality.replace(/^gmina\s+/i, '')}`);
+        }
+        if (address.county) adminDetails.push(`pow. ${address.county.replace(/^powiat\s+/i, '')}`);
+        if (address.state) adminDetails.push(`woj. ${address.state.replace(/^województwo\s+/i, '')}`);
+
+        const subLabel = adminDetails.join(' • ');
+        const displayName = subLabel ? `${mainLocality} (${subLabel})` : item.display_name;
+        const inPoland = (address.country_code || '').toLowerCase() === 'pl' || (lat >= 48.0 && lat <= 56.0 && lng >= 13.0 && lng <= 25.5);
+        const exact = mainLocality.toLowerCase() === normQuery;
+
+        candidateList.push({
+          name: displayName,
+          lat,
+          lng,
+          rawName: mainLocality,
+          subLabel,
+          isPoland: inPoland,
+          population: 0,
+          isExactMatch: exact
+        });
+      }
+
+      const deduplicated: typeof candidateList = [];
+      for (const cand of candidateList) {
+        const alreadyExists = deduplicated.some(d => {
+          const dist = Math.hypot(d.lat - cand.lat, d.lng - cand.lng);
+          return dist < 0.04 && d.rawName.toLowerCase() === cand.rawName.toLowerCase();
+        });
+        if (!alreadyExists) {
+          deduplicated.push(cand);
         }
       }
 
-      // 2. Open-Meteo Geocoding
-      const omRes = await fetch(
-        `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=pl&format=json`
-      );
-      if (omRes.ok) {
-        const omData = await omRes.json();
-        if (omData.results && Array.isArray(omData.results)) {
-          const results = omData.results.map((item: any) => {
-            const adminParts: string[] = [];
-            if (item.admin3) adminParts.push(item.admin3.replace(/^Gmina\s+/i, 'gm. '));
-            if (item.admin2) adminParts.push(item.admin2.replace(/^Powiat\s+/i, 'pow. '));
-            if (item.admin1) adminParts.push(item.admin1.startsWith('woj.') ? item.admin1 : `woj. ${item.admin1}`);
+      deduplicated.sort((a, b) => {
+        const aExact = a.isExactMatch ? 1 : 0;
+        const bExact = b.isExactMatch ? 1 : 0;
+        if (aExact !== bExact) return bExact - aExact;
 
-            const subLabel = adminParts.join(' • ');
-            return {
-              name: subLabel ? `${item.name} (${subLabel})` : item.name,
-              lat: parseFloat(item.latitude),
-              lng: parseFloat(item.longitude),
-            };
-          }).filter((r: any) => !isNaN(r.lat) && !isNaN(r.lng));
-          setSearchResults(results);
-        }
-      }
+        const aStarts = a.rawName.toLowerCase().startsWith(normQuery) ? 1 : 0;
+        const bStarts = b.rawName.toLowerCase().startsWith(normQuery) ? 1 : 0;
+        if (aStarts !== bStarts) return bStarts - aStarts;
+
+        const aPL = a.isPoland ? 1 : 0;
+        const bPL = b.isPoland ? 1 : 0;
+        if (aPL !== bPL) return bPL - aPL;
+
+        return b.population - a.population;
+      });
+
+      setSearchResults(deduplicated.map(d => ({ name: d.name, lat: d.lat, lng: d.lng })));
     } catch (err) {
       console.warn("Error search failed:", err);
+      setSearchResults([]);
     } finally {
       setIsSearching(false);
     }

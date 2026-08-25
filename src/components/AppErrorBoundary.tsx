@@ -39,7 +39,9 @@ export default class AppErrorBoundary extends React.Component<Props, State> {
             message={this.state.errorMessage} 
             onRetry={() => {
               try {
-                localStorage.clear();
+                localStorage.removeItem("aura_last_weather");
+                localStorage.removeItem("aura_last_sync_time");
+                localStorage.removeItem("aura_last_method");
               } catch (e) {}
               window.location.reload();
             }} 

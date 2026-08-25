@@ -26,7 +26,22 @@ export default function SavedPlacesSection({ currentCity, currentLat, currentLng
     try {
       const stored = localStorage.getItem("aura_saved_places");
       if (stored) {
-        return JSON.parse(stored);
+        const parsed = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const valid = parsed.filter(
+            (p: any) =>
+              p &&
+              typeof p.name === "string" &&
+              p.name.trim().length > 0 &&
+              typeof p.lat === "number" &&
+              typeof p.lng === "number" &&
+              !isNaN(p.lat) &&
+              !isNaN(p.lng)
+          );
+          if (valid.length > 0) {
+            return valid;
+          }
+        }
       }
     } catch (e) {
       console.error("Error reading saved places:", e);
@@ -36,7 +51,9 @@ export default function SavedPlacesSection({ currentCity, currentLat, currentLng
 
   useEffect(() => {
     try {
-      localStorage.setItem("aura_saved_places", JSON.stringify(places));
+      if (Array.isArray(places) && places.length > 0) {
+        localStorage.setItem("aura_saved_places", JSON.stringify(places));
+      }
     } catch (e) {
       console.error("Error saving places:", e);
     }

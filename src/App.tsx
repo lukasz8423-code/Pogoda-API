@@ -7,7 +7,7 @@ import WeatherSkeleton from "./components/WeatherSkeleton";
 import WeatherError from "./components/WeatherError";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 import PwaInstallPrompt from "./components/PwaInstallPrompt";
-import { detectUserLocation } from "./utils/geolocation";
+import { detectUserLocation, isPolandCoordinates } from "./utils/geolocation";
 import { GeoDiagnosticInfo } from "./components/PwaDiagnosticModal";
 import { fetchNearestImgwSynop, fetchNearestImgwHydro } from "./utils/imgw";
 import { fetchNearestGiosAirQuality } from "./utils/gios";
@@ -88,17 +88,25 @@ export default function App() {
         
         if (savedCoordsStr && savedWeatherStr) {
           const parsedCoords = JSON.parse(savedCoordsStr);
+          const isManual = savedMethodStr === "manual";
           
-          // Safety: If cached location is outside Poland or was from old IP fallback (Gdansk/Lodz)
-          const isPoland = parsedCoords && 
-                          parsedCoords.lat >= 48.0 && parsedCoords.lat <= 56.0 && 
-                          parsedCoords.lng >= 13.0 && parsedCoords.lng <= 25.0;
+          // Safety checks:
+          // 1. If manual: must be valid global coordinates and not CJK/Shanghai
+          // 2. If auto GPS: must be within Poland bounds
+          const isValidCoords = parsedCoords &&
+                               typeof parsedCoords.lat === 'number' && typeof parsedCoords.lng === 'number' &&
+                               !isNaN(parsedCoords.lat) && !isNaN(parsedCoords.lng) &&
+                               !(parsedCoords.lat === 0 && parsedCoords.lng === 0);
+
+          const isAllowed = isManual 
+            ? isValidCoords && (parsedCoords.lat >= -90 && parsedCoords.lat <= 90 && parsedCoords.lng >= -180 && parsedCoords.lng <= 180)
+            : isValidCoords && isPolandCoordinates(parsedCoords.lat, parsedCoords.lng);
           
           const isIpArtifact = savedMethodStr === "ip" || savedMethodStr === "cached" || 
-                              (!savedMethodStr && (savedCityStr === "Gdańsk" || savedCityStr === "Łódź" || savedCityStr === "Nieznana lokalizacja"));
+                              (!savedMethodStr && (savedCityStr === "Gdańsk" || savedCityStr === "Łódź" || savedCityStr === "Nieznana lokalizacja" || savedCityStr === "Szanghaj" || savedCityStr === "Shanghai"));
 
-          if (!isPoland || isIpArtifact) {
-            console.warn("🚨 [App] Purging stale or IP fallback cache:", savedCityStr);
+          if (!isAllowed || isIpArtifact) {
+            console.warn("🚨 [App] Purging stale, foreign or IP fallback cache:", savedCityStr, parsedCoords);
             try {
               localStorage.removeItem("aura_last_coords");
               localStorage.removeItem("aura_last_city");
@@ -115,7 +123,7 @@ export default function App() {
                 setCustomCityName(savedCityStr);
               }
               setWeatherData(parsedWeather);
-              updateGeoDiagnostic(parsedCoords.lat, parsedCoords.lng, savedCityStr || parsedWeather.city, savedMethodStr || "GPS / Auto");
+              updateGeoDiagnostic(parsedCoords.lat, parsedCoords.lng, savedCityStr || parsedWeather.city, savedMethodStr || (isManual ? "Ręczny wybór" : "GPS"));
               hasCachedData = true;
             }
           }
@@ -135,12 +143,19 @@ export default function App() {
           detectUserLocation({ timeoutMs: 3000 }),
           new Promise<never>((_, reject) => setTimeout(() => reject(new Error("Startup location timeout")), 3500))
         ]);
+        
+        if (!isPolandCoordinates(detected.lat, detected.lng)) {
+          console.warn("🚨 [App] Rejecting auto-detected GPS coordinates outside Poland:", detected.lat, detected.lng);
+          setIsLoading(false);
+          return;
+        }
+
         console.log("Startup location detected:", detected);
         updateGeoDiagnostic(detected.lat, detected.lng, detected.cityName, detected.method, detected.accuracy);
         setCustomCityName(detected.cityName || null);
         
         // Fetch weather for detected GPS coordinates
-        handleLocationSelected(detected.lat, detected.lng, detected.cityName, hasCachedData);
+        handleLocationSelected(detected.lat, detected.lng, detected.cityName, hasCachedData, false);
       } catch (err: any) {
         console.warn("Startup background location detection notice:", err?.message || err);
         // If no cached data, UI is already cleanly resting on IntroScreen for instant manual selection
@@ -581,13 +596,35 @@ export default function App() {
 
   const handleLocationSelected = (lat: number, lng: number, displayName?: string, silent = false, isManual = false) => {
     isFetchingWeatherRef.current = false;
+
+    // Central coordinates validation
+    if (typeof lat !== 'number' || typeof lng !== 'number' || isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+      console.warn("🚨 [App] Invalid coordinates in handleLocationSelected:", lat, lng);
+      return;
+    }
+
+    if (!isManual) {
+      if (!isPolandCoordinates(lat, lng)) {
+        console.warn("🚨 [App] Auto-GPS coordinates outside Poland rejected:", lat, lng);
+        if (!weatherData) {
+          setError("Wykryto lokalizację poza granicami Polski. Wybierz miejscowość z listy lub wpisz w wyszukiwarce.");
+        }
+        return;
+      }
+    } else {
+      if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+        console.warn("🚨 [App] Manual coordinates out of global range:", lat, lng);
+        return;
+      }
+    }
+
     setCoords({ lat, lng });
     if (isManual && displayName) {
       setCustomCityName(displayName);
     } else {
       setCustomCityName(null);
     }
-    updateGeoDiagnostic(lat, lng, displayName || "Wczytywanie...");
+    updateGeoDiagnostic(lat, lng, displayName || "Wczytywanie...", isManual ? "Ręczny wybór" : "GPS");
     return fetchWeather(lat, lng, displayName || undefined, silent, isManual);
   };
 

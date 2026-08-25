@@ -16,6 +16,24 @@ export interface DetectedLocation {
 }
 
 /**
+ * Validates whether GPS coordinates fall within the geographical boundary of Poland.
+ * Poland latitude bounds: 48.0 - 56.0
+ * Poland longitude bounds: 13.0 - 25.5
+ */
+export function isPolandCoordinates(lat: number, lng: number): boolean {
+  return (
+    typeof lat === "number" &&
+    typeof lng === "number" &&
+    !isNaN(lat) &&
+    !isNaN(lng) &&
+    lat >= 48.0 &&
+    lat <= 56.0 &&
+    lng >= 13.0 &&
+    lng <= 25.5
+  );
+}
+
+/**
  * Sanitizes and validates city names to prevent Chinese, CJK, or weird non-Polish characters.
  */
 function isValidCityName(name?: string): boolean {
@@ -236,6 +254,12 @@ export async function detectUserLocation(
     console.log("📍 [Geo] Stage 1: Requesting High Accuracy GPS...");
     const pos = await getGps(true, Math.min(timeoutMs, 6000));
     const { latitude: lat, longitude: lng } = pos;
+    
+    if (!isPolandCoordinates(lat, lng)) {
+      console.warn(`⚠️ [Geo] Stage 1 GPS returned coordinates outside Poland: lat=${lat}, lng=${lng}. Rejecting auto-GPS.`);
+      throw new Error("Wykryto lokalizację poza granicami Polski. Włącz rzeczywisty GPS w telefonie lub wybierz miejscowość z listy.");
+    }
+
     const accuracy = Math.round(pos.accuracy);
     const cityName = await reverseGeocode(lat, lng);
 
@@ -257,6 +281,12 @@ export async function detectUserLocation(
     console.log("📍 [Geo] Stage 2: Requesting Standard Accuracy GPS...");
     const pos = await getGps(false, 4000);
     const { latitude: lat, longitude: lng } = pos;
+
+    if (!isPolandCoordinates(lat, lng)) {
+      console.warn(`⚠️ [Geo] Stage 2 GPS returned coordinates outside Poland: lat=${lat}, lng=${lng}. Rejecting auto-GPS.`);
+      throw new Error("Wykryto lokalizację poza granicami Polski. Włącz rzeczywisty GPS w telefonie lub wybierz miejscowość z listy.");
+    }
+
     const accuracy = Math.round(pos.accuracy);
     const cityName = await reverseGeocode(lat, lng);
 
@@ -271,7 +301,7 @@ export async function detectUserLocation(
     };
   } catch (err: any) {
     console.warn("⚠️ [Geo] Stage 2 GPS failed or timed out:", err);
-    if (err?.message && err.message.includes("odrzucony")) {
+    if (err?.message && (err.message.includes("odrzucony") || err.message.includes("granicami Polski"))) {
       throw err;
     }
   }
