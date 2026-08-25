@@ -24,4 +24,6 @@ jobs:
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           folder: dist
-          branch: aura-lab-pages
+          branch: gh-pages
+          target-folder: aura-lab
+          clean: false
