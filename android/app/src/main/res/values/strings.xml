@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Aura Pogoda</string>
-    <string name="title_activity_main">Aura Pogoda</string>
-    <string name="package_name">com.pogodaapi.app</string>
-    <string name="custom_url_scheme">com.pogodaapi.app</string>
-</resources>
