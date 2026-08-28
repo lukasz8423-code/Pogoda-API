@@ -1,6 +1,5 @@
-import React from "react";
 import { motion } from "motion/react";
-import { CloudRain, CloudOff, AlertTriangle, Clock, Droplets, ArrowRight } from "lucide-react";
+import { CloudRain, CloudOff, AlertTriangle, Clock } from "lucide-react";
 import { WeatherResponse } from "../types";
 import { checkStormStatus } from "../utils/weatherUtils";
 

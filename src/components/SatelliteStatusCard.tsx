@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Orbit, Radio, Signal, CheckCircle2, RefreshCw, Cpu, ShieldCheck, ChevronDown, ChevronUp, Globe, Sparkles, Zap, Activity } from "lucide-react";
+import { Orbit, Radio, Signal, RefreshCw, ChevronDown, ChevronUp, Globe, Activity } from "lucide-react";
 
 interface SatelliteStatusCardProps {
   locationName?: string;

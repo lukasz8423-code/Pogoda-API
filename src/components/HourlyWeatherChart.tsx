@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { Thermometer, CloudRain, Wind, TrendingUp } from "lucide-react";
 import AiWeatherIcon from "./AiWeatherIcon";
 

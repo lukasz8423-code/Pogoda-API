@@ -1,4 +1,3 @@
-import React from "react";
 import { Flame, Sun, ShieldAlert, Heart, Clock } from "lucide-react";
 import { HourlyForecast, DailyForecast, WeatherResponse } from "../types";
 
@@ -11,12 +10,10 @@ interface HeatStressTomorrowCardProps {
 
 export default function HeatStressTomorrowCard({ 
   hourly: hourlyProp, 
-  daily: dailyProp, 
   data,
   startIndex = 0 
 }: HeatStressTomorrowCardProps) {
   const hourly = hourlyProp || data?.weather?.hourly;
-  const daily = dailyProp || data?.weather?.daily;
 
   if (!hourly || !hourly.time || hourly.time.length < 24) return null;
 

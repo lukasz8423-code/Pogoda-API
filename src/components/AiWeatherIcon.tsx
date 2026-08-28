@@ -26,7 +26,7 @@ interface AiWeatherIconProps {
 export default function AiWeatherIcon({
   code,
   isDay,
-  cloudCover = 0,
+  cloudCover: _cloudCover = 0,
   precip = 0,
   className = "",
   size = "md"

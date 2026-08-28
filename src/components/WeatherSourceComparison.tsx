@@ -1,14 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { useState, useEffect, useRef } from "react";
+import { motion } from "motion/react";
 import { 
   Layers, 
-  Cloud, 
   Wind, 
   Thermometer, 
   ShieldCheck, 
-  CheckCircle2, 
-  AlertTriangle,
-  GitMerge, 
   Cpu, 
   Radio, 
   Users, 
@@ -17,13 +13,10 @@ import {
   Droplet, 
   Sun, 
   Gauge, 
-  RefreshCw, 
   Leaf,
-  Info,
   Database
 } from "lucide-react";
 import { WeatherResponse } from "../types";
-import { getDistanceKm } from "../utils/distance";
 import { calculateLeafWetness } from "../utils/weatherUtils";
 
 interface WeatherSourceComparisonProps {
@@ -45,7 +38,6 @@ interface WeatherSourceComparisonProps {
 }
 
 export default function WeatherSourceComparison({
-  sourcesData,
   currentTemp,
   currentCloud,
   currentWind,
@@ -60,7 +52,6 @@ export default function WeatherSourceComparison({
   const [selectedModel, setSelectedModel] = useState<string>("arome");
   const [stationsList, setStationsList] = useState<any[]>([]);
   const [selectedStationId, setSelectedStationId] = useState<string>("");
-  const [manualOverride, setManualOverride] = useState(false);
   const [userReport, setUserReport] = useState<string | null>(null);
   const [reportSubmitted, setReportSubmitted] = useState(false);
   const [communityCount, setCommunityCount] = useState(14);

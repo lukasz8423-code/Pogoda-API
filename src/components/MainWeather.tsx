@@ -1,16 +1,12 @@
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { 
   MapPin, 
   RotateCw, 
   Search, 
   Locate,
-  Compass, 
   Wind, 
   Droplets, 
   Sun, 
-  Moon,
-  ArrowUp, 
-  ArrowDown, 
   Cloud,
   QrCode,
   CloudRain,
@@ -21,56 +17,25 @@ import {
   Sunset,
   ChevronUp,
   ChevronDown,
-  AlertCircle,
   AlertTriangle,
   RefreshCw,
-  Smartphone,
   Thermometer,
-  Activity,
-  GitMerge,
-  Sparkles,
-  Cpu,
   Gauge,
-  Tractor,
-  Satellite,
-  TrendingUp,
-  TrendingDown,
-  Layers,
-  Radio,
-  Sliders,
-  ShieldCheck,
-  Info,
   Tv,
-  Globe,
-  Wifi,
-  Camera,
-  HelpCircle,
-  LayoutDashboard,
   Waves,
   Sprout,
   Settings,
-  Zap
 } from "lucide-react";
-import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import WindCompassRose from "./WindCompassRose";
-import { WeatherResponse, WeatherAnalysis } from "../types";
+import { WeatherResponse } from "../types";
 import { 
   getWeatherMeta, 
-  formatDayOfWeek, 
-  getWindDirection, 
-  getUvIndexDescription,
   calculateAdjustedUvIndex,
   calculateApparentTemperature,
-  sanitizeHourCode,
-  getCloudCoverLabel,
   getCityLocationString,
-  getWeatherDescription
 } from "../utils/weatherUtils";
-import AnimatedWeatherIcon from "./AnimatedWeatherIcon";
 import AiWeatherIcon from "./AiWeatherIcon";
 import AmbientWeatherEffect from "./AmbientWeatherEffect";
-import WeatherAdviceCards from "./WeatherAdviceCards";
 import StormRadar from "./StormRadar";
 import WeatherSourceComparison from "./WeatherSourceComparison";
 import SatelliteStatusCard from "./SatelliteStatusCard";
@@ -80,7 +45,6 @@ import RainAlertNowcastCard from "./RainAlertNowcastCard";
 import MeteoLcdConsole from "./MeteoLcdConsole";
 import QrCodeModal from "./QrCodeModal";
 import PwaDiagnosticModal, { GeoDiagnosticInfo } from "./PwaDiagnosticModal";
-import AdditionalWeatherParameters from "./AdditionalWeatherParameters";
 import ApiDataFlowDiagnosticsCard from "./ApiDataFlowDiagnosticsCard";
 import NowcastPrecipitationAlert from "./NowcastPrecipitationAlert";
 import AgroFieldConditionsCard from "./AgroFieldConditionsCard";
@@ -104,24 +68,9 @@ interface MainWeatherProps {
   geoDiagnostic?: GeoDiagnosticInfo | null;
 }
 
-const gridVariants = {
-  hidden: { opacity: 0 },
-  visible: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
-};
-
-const cardVariants = {
-  hidden: { opacity: 0, y: 10 },
-  visible: { opacity: 1, y: 0 }
-};
-
 export default function MainWeather({ data, userLat, userLng, onRefresh, onBackToSearch, isRefreshing, onLocationSelected, geoDiagnostic }: MainWeatherProps) {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [expandedDayIndex, setExpandedDayIndex] = useState<number | null | "all">(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-
   const [sensorLux, setSensorLux] = useState<number | null>(null);
   const [lastCameraLuminance, setLastCameraLuminance] = useState<number | null>(null);
   const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment");
@@ -135,8 +84,8 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
   const [showLcdConsole, setShowLcdConsole] = useState(false);
   const [showAllDetails, setShowAllDetails] = useState(false);
-  const [isMeasuringCameraLux, setIsMeasuringCameraLux] = useState(false);
-  const [cameraLuxError, setCameraLuxError] = useState<string | null>(null);
+  const [, setIsMeasuringCameraLux] = useState(false);
+  const [, setCameraLuxError] = useState<string | null>(null);
 
   const [isLocating, setIsLocating] = useState(false);
   const [locationToast, setLocationToast] = useState<string | null>(null);
@@ -177,15 +126,15 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const [selectedStationOverride, setSelectedStationOverride] = useState<{
     id: string;
     name: string;
-    temp: number;
-    humidity: number;
-    windSpeed: number;
-    pressure: number;
+    temp: number | null;
+    humidity: number | null;
+    windSpeed: number | null;
+    pressure: number | null;
     distance: string;
   } | null>(null);
 
   const [dismissedRecs, setDismissedRecs] = useState<string[]>([]);
-  const [manualCloudCover, setManualCloudCover] = useState<number | null>(null);
+  const [manualCloudCover] = useState<number | null>(null);
   const [userWeatherOverrideCode, setUserWeatherOverrideCode] = useState<number | null>(() => {
     try {
       const saved = localStorage.getItem("aura_user_weather_override");
@@ -195,7 +144,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     }
   });
 
-  const [isManualStationSelected, setIsManualStationSelected] = useState(false);
+  const [, setIsManualStationSelected] = useState(false);
 
   useEffect(() => {
     if (data && data.imgwStation) {
@@ -408,8 +357,6 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     sunset: Array.isArray(rawDaily?.sunset) ? rawDaily.sunset : []
   };
   const isDay = current?.is_day === 1;
-  const weatherMeta = getWeatherMeta(current?.weather_code ?? 0, isDay, current?.cloud_cover ?? 0, current?.precipitation ?? 0);
-  const CurrentIcon = weatherMeta.icon;
 
   const getMatchedIndex = () => {
     try {
@@ -635,44 +582,6 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     ? phoneBarometer
     : stPressure;
 
-  const discomfortIndex = (currentTemp !== null && currentHumidity !== null)
-    ? Number((currentTemp - 0.55 * (1 - 0.01 * currentHumidity) * (currentTemp - 14.4)).toFixed(1))
-    : null;
-
-  const calculateLuxCloudCover = (lux: number, isDaytime: boolean, loc: "indoor" | "outdoor") => {
-    if (!isDaytime) return null;
-
-    let cloudCover: number;
-    let label: string;
-    let icon: string;
-
-    if (loc === "indoor") {
-      const effectiveLux = lux * 2.5;
-      const factor = Math.min(1, Math.max(0, (effectiveLux - 200) / (7500 - 200)));
-      cloudCover = Math.round((1 - factor) * 100);
-    } else {
-      const factor = Math.min(1, Math.max(0, (lux - 300) / (32000 - 300)));
-      cloudCover = Math.round((1 - factor) * 100);
-    }
-
-    if (cloudCover <= 10) {
-      label = loc === "indoor" ? "Bezchmurnie (Fotometr za szybą)" : "Pełne słońce w plenerze";
-      icon = "☀️";
-    } else if (cloudCover <= 40) {
-      label = loc === "indoor" ? "Przejaśnienia za szybą" : "Jasno i słonecznie (Fotometr)";
-      icon = "⛅";
-    } else if (cloudCover <= 70) {
-      label = loc === "indoor" ? "Umiarkowane zachmurzenie za szybą" : "Gęste chmury (Fotometr)";
-      icon = "⛅";
-    } else {
-      label = loc === "indoor" ? "Pochmurno / Cień za szybą" : "Ciemne chmury (Fotometr)";
-      icon = "☁️";
-    }
-
-    return { cloudCover, label, icon };
-  };
-
-
   let wyswietlaneZachmurzenie = manualCloudCover !== null 
     ? manualCloudCover 
     : currentCloudCover;
@@ -731,34 +640,6 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     }
   }, [hourly, daily, currentTemp]);
 
-  const upcomingNightTemp = useMemo(() => {
-    try {
-      if (hourly && Array.isArray(hourly.time) && Array.isArray(hourly.temperature_2m)) {
-        const now = new Date();
-        const currentIsoHour = now.toISOString().slice(0, 13);
-        const curIdx = hourly.time.findIndex((t: string) => t.startsWith(currentIsoHour));
-        const startIdx = curIdx !== -1 ? curIdx : 0;
-        
-        const nightTemps: number[] = [];
-        for (let i = startIdx; i < Math.min(hourly.time.length, startIdx + 24); i++) {
-          const timeStr = hourly.time[i];
-          const hourVal = parseInt(timeStr.slice(11, 13), 10);
-          if (hourVal >= 22 || hourVal <= 6) {
-            if (typeof hourly.temperature_2m[i] === 'number') {
-              nightTemps.push(hourly.temperature_2m[i]);
-            }
-          }
-        }
-        if (nightTemps.length > 0) {
-          return Math.min(...nightTemps);
-        }
-      }
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
-    } catch (e) {
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
-    }
-  }, [hourly, daily, currentTemp]);
-
   // Early return ONLY after ALL hooks have been unconditionally called
   if (!weatherObj || !current) {
     return (
@@ -790,37 +671,6 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   }
 
   // Find index of the current hour using the specific logic requested by the user
-  const getCloudCoverLabel = (pct: number) => {
-    if (pct < 10) return "Bezchmurnie";
-    if (pct <= 40) return "Przejaśnienia / Lekkie chmury";
-    if (pct < 60) return "Umiarkowane";
-    if (pct < 90) return "Duże";
-    return "Pochmurno";
-  };
-
-  const getUvIndexDescription = (uv: number) => {
-    if (uv < 3) return "Niskie";
-    if (uv < 6) return "Umiarkowane";
-    if (uv < 8) return "Wysokie";
-    if (uv < 11) return "B. Wysokie";
-    return "Ekstremalne";
-  };
-
-  const getWindDirection = (deg: number) => {
-    const directions = ["Północny (N)", "Północno-Wschodni (NE)", "Wschodni (E)", "Południowo-Wschodni (SE)", "Południowy (S)", "Południowo-Zachodni (SW)", "Zachodni (W)", "Północno-Zachodni (NW)"];
-    const index = Math.round(deg / 45) % 8;
-    return directions[index];
-  };
-
-  const getDiscomfortDetails = (di: number | null) => {
-    if (di === null || isNaN(di)) return { label: "Brak danych", color: "text-slate-400", bg: "bg-slate-500/20", border: "border-slate-500/30", barColor: "bg-slate-500", desc: "Brak wystarczających danych do obliczenia wskaźnika." };
-    if (di < 21) return { label: "Komfortowo", color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", barColor: "bg-emerald-500", desc: "Przyjemne warunki termiczne bez odczucia duszności." };
-    if (di < 25) return { label: "Ciepło / Lekki dyskomfort", color: "text-amber-400", bg: "bg-amber-500/20", border: "border-amber-500/30", barColor: "bg-amber-500", desc: "Zauważalne ciepło, warto zadbać o nawodnienie." };
-    if (di < 30) return { label: "Duszno i parno", color: "text-orange-400", bg: "bg-orange-500/20", border: "border-orange-500/30", barColor: "bg-orange-500", desc: "Podwyższona wilgotność i temperatura. Możliwe uczucie duszności." };
-    return { label: "Ekstremalny upał i duszność", color: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/30", barColor: "bg-red-500", desc: "Bardzo wysoki stres termiczny! Unikaj wysiłku na słońcu." };
-  };
-  const discomfortMeta = getDiscomfortDetails(discomfortIndex);
-
   const getWindDirectionText = (deg: number) => {
     const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
     const index = Math.round((deg % 360) / 22.5);
@@ -839,51 +689,25 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     userWeatherOverrideCode ?? undefined
   );
 
-  const isPrecipitatingOrStorm = currentPrecipitation > 0.05 || (currentWeatherMeta.code >= 50 && currentWeatherMeta.code <= 99);
   // Removed luxCloudRes usage as requested
   let displayOpis = currentWeatherMeta.text;
-  let displayIkonka = currentWeatherMeta.emoji;
-
-  const lowCloud = hourly.cloud_cover_low?.[currentIdx] ?? current?.cloud_cover_low ?? 0;
-  const midCloud = hourly.cloud_cover_mid?.[currentIdx] ?? current?.cloud_cover_mid ?? 0;
-  const highCloud = hourly.cloud_cover_high?.[currentIdx] ?? current?.cloud_cover_high ?? 0;
 
   const windDirText = getWindDirectionText(typeof currentWindDirection === 'number' ? currentWindDirection : 0);
-  const indoorHumidity = Math.min(99, Math.max(20, Math.round(currentHumidity * 0.95 + 2)));
-  
-  // Realistic cloud ceiling estimate based on weather conditions and layers
-  let cloudCeiling = 1200;
-  if (wyswietlaneZachmurzenie <= 5 || currentCloudCover <= 5 || wCode === 0) {
-    cloudCeiling = 12192; // Unlimited / high troposphere limit matching commercial apps for clear skies
-  } else if (wCode <= 2 && wyswietlaneZachmurzenie < 50) {
-    cloudCeiling = Math.round(1400 + (currentTemp * 30) - (currentHumidity * 5));
-  } else if (lowCloud > 15) {
-    cloudCeiling = Math.round(20 * (100 - currentHumidity) + 300);
-  } else if (midCloud > 15) {
-    cloudCeiling = Math.round(2500 + (100 - currentHumidity) * 20);
-  } else if (highCloud > 10) {
-    cloudCeiling = Math.round(7000 + (currentTemp * 12) - (currentHumidity * 8));
-  } else if (currentCloudCover > 0) {
-    cloudCeiling = Math.max(800, Math.round(35 * (100 - currentHumidity)));
-  }
-  
+
   // Visibility from API
   const visibilityFromApi = current?.visibility ?? hourly.visibility?.[currentIdx];
   let rawVisKm = visibilityFromApi ? Math.round(visibilityFromApi / 1000) : 20;
   // If no fog (wCode 40-49), no rain, and humidity <= 92%, clear air visibility should be realistic (at least 15-30km)
-  const isFogOrRain = (wCode >= 40 && wCode <= 49) || currentPrecipitation > 0 || rawCurrentHumidity > 92;
+  const isFogOrRain = (wCode >= 40 && wCode <= 49) || currentPrecipitation > 0 || (rawCurrentHumidity ?? 0) > 92;
   if (!isFogOrRain && rawVisKm < 10) {
     rawVisKm = Math.round(18 + (100 - wyswietlaneZachmurzenie) * 0.12);
   }
   const visibilityKm = rawVisKm;
 
   // UV index from meteo source (using current UV without zeroing by is_day)
-  let displayUv = "Brak danych";
   let uvVal = 0;
   if (currentUvIndex !== null && typeof currentUvIndex === 'number') {
     uvVal = Math.max(0, currentUvIndex);
-    const uvOpis = getUvIndexDescription(uvVal);
-    displayUv = `${uvVal.toFixed(1)} — ${uvOpis}`;
   }
 
   // Recommendations logic
@@ -906,7 +730,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
       color: 'bg-indigo-500/10 border-indigo-500/30'
     });
   }
-  if (currentPop > 40 || (wCode >= 51 && wCode <= 67)) {
+  if ((currentPop ?? 0) > 40 || (wCode >= 51 && wCode <= 67)) {
     recommendations.push({
       id: 'rain',
       type: 'DESZCZ',
@@ -922,7 +746,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     try {
       const datePrefix = targetDayStr.slice(0, 10);
       return hourly.time
-        .map((t, idx) => {
+        .map((t: string, idx: number) => {
           const pop = (hourly.precipitation_probability && typeof hourly.precipitation_probability[idx] === 'number') ? hourly.precipitation_probability[idx] : 0;
           let cloudCover = (hourly.cloud_cover && typeof hourly.cloud_cover[idx] === 'number') ? hourly.cloud_cover[idx] : 0;
           const precip = (hourly.precipitation && typeof hourly.precipitation[idx] === 'number') ? hourly.precipitation[idx] : 0;
@@ -953,20 +777,11 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             precip
           };
         })
-        .filter(item => item.timeStr.startsWith(datePrefix));
+        .filter((item: { timeStr: string }) => item.timeStr.startsWith(datePrefix));
     } catch (e) {
       return [];
     }
   };
-
-  // Calculate 7-day temperature range for relative scale bars
-  const globalMinTemp = Array.isArray(daily?.temperature_2m_min) && daily.temperature_2m_min.length > 0 
-    ? Math.min(...daily.temperature_2m_min.filter((t): t is number => typeof t === 'number'))
-    : 0;
-  const globalMaxTemp = Array.isArray(daily?.temperature_2m_max) && daily.temperature_2m_max.length > 0
-    ? Math.max(...daily.temperature_2m_max.filter((t): t is number => typeof t === 'number'))
-    : 30;
-  const globalTempRange = Math.max(1, (isFinite(globalMaxTemp) ? globalMaxTemp : 30) - (isFinite(globalMinTemp) ? globalMinTemp : 0));
 
   // Dynamic Background & Lighting gradient calculation based on weather code and time of day (day / sunset / night / rain / storm / snow)
   const currentHour = new Date().getHours();
@@ -1791,7 +1606,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               </button>
             </div>
             <div className="space-y-3">
-              {daily.time.slice(0, 3).map((day, idx) => {
+              {daily.time.slice(0, 3).map((day: string, idx: number) => {
                 const dayName = idx === 0 ? "Dziś" : idx === 1 ? "Jutro" : new Date(day).toLocaleDateString("pl-PL", { weekday: "long" }).replace(/^\w/, (c) => c.toUpperCase());
                 const dayWCode = daily.weather_code?.[idx] ?? 0;
                 const dMeta = getWeatherMeta(dayWCode, true);
@@ -1844,7 +1659,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
                     {isExpanded && (
                       <div className="mt-2.5 overflow-x-auto no-scrollbar pb-2 touch-pan-x" style={{ willChange: 'scroll-position' }}>
                         <div className="flex space-x-2.5 p-1">
-                          {getHourlyForDay(day).map((h, hIdx) => (
+                          {getHourlyForDay(day).map((h: any, hIdx: number) => (
                             <div key={hIdx} className="min-w-[80px] flex flex-col items-center p-3 bg-white/[0.05] border border-white/10 rounded-2xl text-center backdrop-blur-xl shadow-md">
                               <span className="text-[10px] text-slate-300 font-bold mb-1">{h.hourLabel}</span>
                               <AiWeatherIcon 

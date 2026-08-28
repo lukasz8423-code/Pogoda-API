@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { AlertCircle, RefreshCw, Search, MapPin, Compass } from "lucide-react";
+import { AlertCircle, RefreshCw, Search, MapPin } from "lucide-react";
 
 interface WeatherErrorProps {
   message: string;
@@ -16,7 +16,7 @@ export default function WeatherError({
   onLocationSelected,
 }: WeatherErrorProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
+  const [, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Array<{ name: string; lat: number; lng: number }>>([]);
 
   const popularPlaces = [

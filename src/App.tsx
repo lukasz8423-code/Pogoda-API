@@ -11,16 +11,14 @@ import { detectUserLocation, isPolandCoordinates, getLastValidLocationOrFallback
 import { GeoDiagnosticInfo } from "./components/PwaDiagnosticModal";
 import { fetchNearestImgwSynop, fetchNearestImgwHydro } from "./utils/imgw";
 import { fetchNearestGiosAirQuality } from "./utils/gios";
-import { calculateLeafWetness } from "./utils/weatherUtils";
 
 import { WeatherResponse } from "./types";
-import { Capacitor } from '@capacitor/core';
 import { getInstallationId, cachedFetch, CACHE_TTLS, isDeveloperMode } from "./utils/cache";
 import { checkBetaTrialStatus } from "./utils/betaTrial";
 import BetaExpiredScreen from "./components/BetaExpiredScreen";
 
 export default function App() {
-  const [isBetaExpired, setIsBetaExpired] = useState<boolean>(() => {
+  const [isBetaExpired] = useState<boolean>(() => {
     try {
       return checkBetaTrialStatus().isExpired;
     } catch (e) {
@@ -32,10 +30,10 @@ export default function App() {
   const [customCityName, setCustomCityName] = useState<string | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStatus, setLoadingStatus] = useState<string>("Uruchamianie...");
+  const [loadingStatus] = useState<string>("Uruchamianie...");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [introMessage, setIntroMessage] = useState<string | null>(null);
+  const [, setIntroMessage] = useState<string | null>(null);
   const [geoDiagnostic, setGeoDiagnostic] = useState<GeoDiagnosticInfo | null>(null);
 
   const isStartingUpRef = useRef(false);

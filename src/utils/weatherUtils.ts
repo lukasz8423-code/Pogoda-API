@@ -44,11 +44,6 @@ export function getCityLocationString(city: string): string {
   return cleaned || city.trim();
 }
 
-export function sanitizeHourCode(rawCode: number, pop: number, precip: number, cloudCover: number): number {
-  // Respect raw Open-Meteo WMO weather code without artificial modification
-  return typeof rawCode === "number" ? rawCode : 0;
-}
-
 export function calculateDewPoint(temp: number | null | undefined, humidity: number | null | undefined): number | null {
   if (temp === null || temp === undefined || humidity === null || humidity === undefined || isNaN(temp) || isNaN(humidity)) {
     return null;

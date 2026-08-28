@@ -13,7 +13,7 @@ const PORT = 3000;
 app.use(express.json());
 
 // Disable caching globally for all responses so browser always gets fresh HTML, JS, and API responses
-app.use((req, res, next) => {
+app.use((_req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
@@ -22,7 +22,6 @@ app.use((req, res, next) => {
 });
 
 // Removed Gemini AI initialization as requested
-const apiKey = process.env.GEMINI_API_KEY?.trim();
 
 // Ensure humidity is within 0-100 range without artificial scaling or "fixing" low values
 function normalizeHumidity(val: any): number | null {
@@ -42,17 +41,6 @@ const GIOS_STATIONS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const GIOS_AQI_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 let giosStationsCache: { data: any[]; timestamp: number } | null = null;
 const giosAqiCache = new Map<number, { data: any; timestamp: number }>();
-
-/**
- * Returns raw API shortwave radiation or null if unavailable.
- * No custom modeling or time-based attenuation.
- */
-function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean = true, rawApiShortwave?: number): number | null {
-  if (typeof rawApiShortwave === 'number' && !isNaN(rawApiShortwave) && rawApiShortwave >= 0) {
-    return Math.round(rawApiShortwave);
-  }
-  return null;
-}
 
 function normalizeStationName(str: string): string {
   return (str || "")
@@ -167,20 +155,20 @@ function parseMetNorwayToWeatherData(data: any): any {
   const curUv = inst.ultraviolet_index_clear_sky ?? null;
 
   const hourlyTime: string[] = [];
-  const hourlyTemp: number[] = [];
-  const hourlyHum: number[] = [];
-  const hourlyAppTemp: number[] = [];
-  const hourlyWind: number[] = [];
-  const hourlyWindDir: number[] = [];
-  const hourlyPressure: number[] = [];
-  const hourlyPrecipProb: number[] = [];
-  const hourlyPrecip: number[] = [];
-  const hourlyUv: number[] = [];
-  const hourlyCloud: number[] = [];
+  const hourlyTemp: (number | null)[] = [];
+  const hourlyHum: (number | null)[] = [];
+  const hourlyAppTemp: (number | null)[] = [];
+  const hourlyWind: (number | null)[] = [];
+  const hourlyWindDir: (number | null)[] = [];
+  const hourlyPressure: (number | null)[] = [];
+  const hourlyPrecipProb: (number | null)[] = [];
+  const hourlyPrecip: (number | null)[] = [];
+  const hourlyUv: (number | null)[] = [];
+  const hourlyCloud: (number | null)[] = [];
   const hourlyCode: number[] = [];
   const hourlyIsDay: number[] = [];
 
-  const dailyMap = new Map<string, { temps: number[]; precips: number[]; uvs: number[]; winds: number[]; codes: number[]; probs: number[] }>();
+  const dailyMap = new Map<string, { temps: (number | null)[]; precips: (number | null)[]; uvs: (number | null)[]; winds: (number | null)[]; codes: number[]; probs: (number | null)[] }>();
 
   for (const step of timeseries.slice(0, 48)) {
     const stInst = step.data?.instant?.details || {};
@@ -229,12 +217,12 @@ function parseMetNorwayToWeatherData(data: any): any {
 
   const dailyTime: string[] = [];
   const dailyCode: number[] = [];
-  const dailyTempMax: number[] = [];
-  const dailyTempMin: number[] = [];
-  const dailyUvMax: number[] = [];
-  const dailyPrecipSum: number[] = [];
-  const dailyPrecipProbMax: number[] = [];
-  const dailyWindMax: number[] = [];
+  const dailyTempMax: (number | null)[] = [];
+  const dailyTempMin: (number | null)[] = [];
+  const dailyUvMax: (number | null)[] = [];
+  const dailyPrecipSum: (number | null)[] = [];
+  const dailyPrecipProbMax: (number | null)[] = [];
+  const dailyWindMax: (number | null)[] = [];
 
   const safeMax = (arr: any[]) => {
     const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
@@ -560,7 +548,7 @@ async function fetchGiosAirQuality(userLat: number, userLng: number) {
  * Fetches Hydrological data from IMGW-PIB API.
  * Returns water levels for the nearest measurement point.
  */
-async function fetchImgwHydroData(userLat: number, userLng: number) {
+async function fetchImgwHydroData(_userLat: number, _userLng: number) {
   try {
     const res = await fetchWithRetry("https://danepubliczne.imgw.pl/api/data/hydro");
     if (!res || !res.ok) return null;
@@ -917,23 +905,6 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
 
     weatherData.activeServers = activeServers;
 
-    const baseTemp = weatherData.current?.temperature_2m ?? (weatherData.hourly?.temperature_2m?.[0] ?? null);
-    const baseHum = normalizeHumidity(weatherData.current?.relative_humidity_2m ?? (weatherData.hourly?.relative_humidity_2m?.[0] ?? null));
-    const c = weatherData.current ?? {};
-    const baseWind = weatherData.current?.wind_speed_10m ?? null;
-
-    // Calculate Perceived Optical Cloud Cover & Ground Truth Solar Irradiance:
-    const lowC = typeof c.cloud_cover_low === 'number' ? c.cloud_cover_low : null;
-    const midC = typeof c.cloud_cover_mid === 'number' ? c.cloud_cover_mid : null;
-    const highC = typeof c.cloud_cover_high === 'number' ? c.cloud_cover_high : null;
-    const totalC = typeof c.cloud_cover === 'number' ? c.cloud_cover : null;
-    const isDay = c.is_day === 1;
-
-    const swRad = typeof c.shortwave_radiation === 'number' ? c.shortwave_radiation : null;
-    const dniRad = typeof c.direct_normal_irradiance === 'number' ? c.direct_normal_irradiance : null;
-    const uvVal = typeof c.uv_index === 'number' ? c.uv_index : null;
-    const precipVal = typeof c.precipitation === 'number' ? c.precipitation : null;
-
     if (weatherData.current) {
       weatherData.current.relative_humidity_2m = normalizeHumidity(weatherData.current.relative_humidity_2m);
 
@@ -1105,8 +1076,8 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
             }
           }
 
-          if ((precipSum >= 0.2 || maxPop >= 40) && maxScore < 70) {
-            return maxPop >= 60 ? 80 : 51;
+          if (((precipSum ?? 0) >= 0.2 || (maxPop ?? 0) >= 40) && maxScore < 70) {
+            return (maxPop ?? 0) >= 60 ? 80 : 51;
           }
 
           return bestCode;
@@ -1250,64 +1221,7 @@ app.get("/api/stations", async (req, res) => {
     return res.json(cachedStation.data);
   }
 
-  const apiKey = process.env.OPENMETEO_API_KEY;
-  let omBase = apiKey ? "https://customer-api.open-meteo.com/v1/forecast" : "https://api.open-meteo.com/v1/forecast";
-  let auth = apiKey ? `&apikey=${apiKey}` : "";
-
   try {
-    const response = await fetchWithRetry(`${omBase}?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,soil_temperature_0cm,soil_moisture_0_to_1cm,shortwave_radiation${auth}`);
-
-    let data: any = {};
-    if (response && response.ok) {
-      data = await response.json().catch(() => ({}));
-    } else {
-      const weatherCached = weatherResponseCache.get(geoKey);
-      if (weatherCached && weatherCached.data && weatherCached.data.weather && weatherCached.data.weather.current) {
-        data = { current: weatherCached.data.weather.current };
-      }
-    }
-    const cur = data.current ?? {};
-    const cloudCover = cur.cloud_cover ?? null;
-    const isDayTime = cur.is_day !== undefined ? (cur.is_day === 1) : true;
-    
-    // Solar radiation calculated strictly according to solar zenith and cloud transmittance physics
-    const solarRadiation = calculateSolarRadiation(cloudCover, isDayTime, cur.shortwave_radiation);
-
-    const baseTemp = cur.temperature_2m ?? null;
-    const baseHumidity = normalizeHumidity(cur.relative_humidity_2m);
-    const baseWind = cur.wind_speed_10m ?? null;
-    const basePressure = cur.pressure_msl ?? null;
-
-    const soilTemp = cur.soil_temperature_0cm ?? baseTemp;
-    
-    const sm0 = cur.soil_moisture_0_to_1cm;
-    const weatherCached = weatherResponseCache.get(geoKey);
-    const cachedMoisture = weatherCached?.data?.weather?.current?.soil_moisture_satellite;
-    let soilMoisture = null;
-    if (typeof cachedMoisture === 'number') {
-      soilMoisture = cachedMoisture;
-    } else if (typeof cur.soil_moisture_satellite === 'number') {
-      soilMoisture = cur.soil_moisture_satellite;
-    } else if (sm0 !== undefined && sm0 !== null) {
-      soilMoisture = Math.round(sm0 > 1 ? sm0 : sm0 * 100);
-    }
-
-    const rainRate = cur.precipitation ?? null;
-    const weatherCode = cur.weather_code ?? cur.weathercode ?? 0;
-
-    const calcLeafWetness = (humidityVal: number | null, rainVal: number | null, wCode?: number) => {
-      const code = wCode ?? weatherCode;
-      const isPrecip = (rainVal !== null && rainVal > 0) || (typeof code === 'number' && code >= 50 && code <= 99);
-      if (humidityVal === null && rainVal === null && !code) return { leafWetness: null, leafWetnessText: "Brak danych" };
-      let index = 0;
-      if (isPrecip) index = 13;
-      else if (typeof code === 'number' && code >= 20 && code <= 29) index = 10;
-      else if (humidityVal !== null && humidityVal >= 90) index = 8;
-      else if (humidityVal !== null && humidityVal >= 80) index = 5;
-      else if (humidityVal !== null && humidityVal >= 65) index = 2;
-      else index = 0;
-      return { leafWetness: index, leafWetnessText: `${index}/15` };
-    };
 
     let stations: any[] = [];
     let giosAir: any = null;
@@ -1348,18 +1262,12 @@ app.get("/api/stations", async (req, res) => {
   }
 });
 
-// Safe helper - AI disabled
-async function callGeminiWithFallback(prompt: string, responseMimeType: string = "application/json"): Promise<string | null> {
-  return null;
-}
-
 // Auxiliary function: generate highly detailed local weather recommendations if Gemini API is unavailable/fails
-function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: string) {
+function getLocalAdviceFallback(city: string, current: any, _daily: any, mode?: string) {
   const satMoisture = typeof current?.soil_moisture_satellite === "number" ? current.soil_moisture_satellite : null;
-  const temp = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : null;
+  const temp = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : 0;
   const cloud = typeof current?.cloud_cover === 'number' ? Math.round(current.cloud_cover) : null;
   const press = typeof current?.pressure_msl === 'number' ? Math.round(current.pressure_msl) : null;
-  const uv = typeof current?.uv_index === 'number' ? current.uv_index : null;
 
   if (mode === "ciekawostka") {
     const triviaFacts = [
@@ -1798,7 +1706,7 @@ setInterval(() => {
 }, 60000);
 
 // API Route: Google Cloud Storage - Get user data
-app.get("/api/cloud-storage", (req, res) => {
+app.get("/api/cloud-storage", (_req, res) => {
   res.json({ success: true, data: cloudStorageStore, timestamp: new Date().toISOString() });
 });
 
@@ -1816,7 +1724,7 @@ app.post("/api/cloud-storage", (req, res) => {
 });
 
 // API Route: Weather Server Sync Schedule & Manual Reset
-app.get("/api/weather/sync-schedule", (req, res) => {
+app.get("/api/weather/sync-schedule", (_req, res) => {
   res.json({
     success: true,
     ...weatherSyncScheduleState,
@@ -1824,7 +1732,7 @@ app.get("/api/weather/sync-schedule", (req, res) => {
   });
 });
 
-app.post("/api/weather/force-sync", (req, res) => {
+app.post("/api/weather/force-sync", (_req, res) => {
   weatherSyncScheduleState.lastScheduledSync = new Date().toISOString();
   weatherSyncScheduleState.status = "Wymuszono świeże pobranie z serwera pogodowego";
   console.log("[Aura Weather Sync] Manual server reset & sync requested.");
