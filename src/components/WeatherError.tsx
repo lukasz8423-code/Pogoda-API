@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { motion } from "motion/react";
-import { AlertCircle, RefreshCw, Search, MapPin } from "lucide-react";
+import { AlertCircle, RefreshCw, Search, MapPin, Compass } from "lucide-react";
 
 interface WeatherErrorProps {
   message: string;
   onRetry: () => void;
   onBackToSearch?: () => void;
-  onLocationSelected?: (lat: number, lng: number, cityName?: string) => void;
+  onLocationSelected?: (lat: number, lng: number, cityName?: string, silent?: boolean, isManual?: boolean) => void;
 }
 
 export default function WeatherError({
@@ -16,7 +16,7 @@ export default function WeatherError({
   onLocationSelected,
 }: WeatherErrorProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [searchResults, setSearchResults] = useState<Array<{ name: string; lat: number; lng: number }>>([]);
 
   const popularPlaces = [
@@ -251,7 +251,7 @@ export default function WeatherError({
                   <button
                     key={`${r.lat}-${r.lng}-${idx}`}
                     type="button"
-                    onClick={() => onLocationSelected(r.lat, r.lng, r.name)}
+                    onClick={() => onLocationSelected(r.lat, r.lng, r.name, false, true)}
                     className="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-blue-600/30 hover:text-white flex items-center space-x-2 transition-colors"
                   >
                     <MapPin className="w-3.5 h-3.5 text-blue-400 shrink-0" />
@@ -274,7 +274,7 @@ export default function WeatherError({
                 <button
                   key={place.name}
                   type="button"
-                  onClick={() => onLocationSelected(place.lat, place.lng, place.name)}
+                  onClick={() => onLocationSelected(place.lat, place.lng, place.name, false, true)}
                   className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 border border-slate-800 rounded-lg text-xs text-slate-300 hover:text-white transition-colors"
                   id={`btn-error-place-${place.name.toLowerCase()}`}
                 >

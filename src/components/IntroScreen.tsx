@@ -249,7 +249,7 @@ export default function IntroScreen({ onLocationSelected, isLoading, initialMess
 
     try {
       console.log("📍 [IntroScreen] User clicked GPS location button");
-      const loc = await detectUserLocation({ timeoutMs: 8000 });
+      const loc = await detectUserLocation({ timeoutMs: 10000, allowFallback: false });
       console.log("📍 [IntroScreen] Detected location:", loc);
       setIsSearching(false);
       onLocationSelected(loc.lat, loc.lng, loc.cityName, false, false);

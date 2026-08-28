@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Smartphone, Gauge, Sun, Compass, RefreshCw, ChevronDown, ChevronUp, Cpu, Info, ShieldCheck, MapPin, Camera, Move, AlertTriangle, Battery, BatteryCharging, BatteryWarning, Flame } from "lucide-react";
+import { Smartphone, Gauge, Sun, Compass, RefreshCw, ChevronDown, ChevronUp, Cpu, Activity, Info, ShieldCheck, MapPin, Camera, Move, CheckCircle2, AlertTriangle, XCircle, Battery, BatteryCharging, BatteryWarning, Flame } from "lucide-react";
 import { useCameraLightMeter } from "../hooks/useCameraLightMeter";
 import { detectUserLocation } from "../utils/geolocation";
 
@@ -198,7 +198,7 @@ export default function DeviceSensorsCard({
   const handleForceHighAccuracyGps = () => {
     const tryFallbackCache = () => {
       try {
-        const savedCoordsStr = localStorage.getItem("aura_last_coords");
+        const savedCoordsStr = localStorage.getItem("aura_gps_coords") || (localStorage.getItem("aura_last_method") === "gps" ? localStorage.getItem("aura_last_coords") : null);
         if (savedCoordsStr) {
           const parsed = JSON.parse(savedCoordsStr);
           if (parsed && typeof parsed.lat === 'number' && typeof parsed.lng === 'number') {
@@ -209,7 +209,7 @@ export default function DeviceSensorsCard({
               altitude: null,
               accuracy: 50,
               permissionDenied: false,
-              message: "Wczytano pozycję z pamięci podręcznej PWA (Ostatnia znana lokalizacja)."
+              message: "Wczytano pozycję z pamięci podręcznej PWA (Ostatnia znana pozycja GPS)."
             });
             if (onGpsUpdate) {
               onGpsUpdate(parsed.lat, parsed.lng);
@@ -346,6 +346,62 @@ export default function DeviceSensorsCard({
         onLuxUpdate(350);
       }
     }
+  };
+
+  // Standard AmbientLightSensor test
+  const handleRequestLightSensorPermission = async () => {
+    setIsScanning(true);
+    await checkAllPermissions();
+
+    if (!('AmbientLightSensor' in window)) {
+      setLightSensorStatus({
+        supported: false,
+        lux: null,
+        permissionStatus: "unsupported",
+        message: "Przeglądarki Android (Chrome/Edge) ze względów prywatności blokują surowy interfejs AmbientLightSensor API w sieci. Kliknij 'Test Aparatem', aby zmierzyć jasność przez obiektyw, lub skorzystaj z satelity Meteosat."
+      });
+      setIsScanning(false);
+      setIsExpanded(true);
+      return;
+    }
+
+    try {
+      // @ts-ignore
+      const sensor = new window.AmbientLightSensor();
+      sensor.addEventListener('reading', () => {
+        const lux = sensor.illuminance;
+        setLightSensorStatus({
+          supported: true,
+          lux: Math.round(lux),
+          permissionStatus: "granted",
+          message: `Odczyt fizyczny z czujnika światła: ${Math.round(lux)} Lux.`
+        });
+        if (onLuxUpdate) {
+          onLuxUpdate(Math.round(lux));
+        }
+      });
+
+      sensor.addEventListener('error', (event: any) => {
+        setLightSensorStatus({
+          supported: false,
+          lux: null,
+          permissionStatus: "denied",
+          message: "Czujnik niedostępny w tej domenie. Przetestuj odczyt światła aparatem poniżej."
+        });
+      });
+
+      sensor.start();
+      setTimeout(() => setIsScanning(false), 1000);
+    } catch {
+      setIsScanning(false);
+      setLightSensorStatus({
+        supported: false,
+        lux: null,
+        permissionStatus: "denied",
+        message: "Przeglądarka zablokowała dostęp. Możesz sprawdzić jasność obiektywem aparatu poniżej."
+      });
+    }
+    setIsExpanded(true);
   };
 
   const runSensorDiagnostics = async () => {

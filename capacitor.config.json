@@ -1,0 +1,6 @@
+{
+  "appId": "com.pogoda.lokalna",
+  "appName": "Pogoda Lokalna",
+  "webDir": "dist",
+  "bundledWebRuntime": false
+}

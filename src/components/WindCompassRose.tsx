@@ -1,3 +1,4 @@
+import React from "react";
 import { Navigation } from "lucide-react";
 
 interface WindCompassRoseProps {

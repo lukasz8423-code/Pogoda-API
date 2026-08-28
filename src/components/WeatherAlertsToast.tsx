@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { Wind, CloudRain, Zap, Sun, X } from "lucide-react";
+import { AlertTriangle, Wind, CloudRain, Zap, Sun, X } from "lucide-react";
 import { WeatherResponse } from "../types";
 import { checkStormStatus } from "../utils/weatherUtils";
 

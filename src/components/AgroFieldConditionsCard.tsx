@@ -1,5 +1,5 @@
 import React from "react";
-import { Sprout, Wind, Sun, Thermometer, Droplet, Activity } from "lucide-react";
+import { Sprout, Wind, Sun, Thermometer, Droplet, Activity, Info } from "lucide-react";
 import { CurrentWeather, WeatherResponse } from "../types";
 import { calculateLeafWetness } from "../utils/weatherUtils";
 

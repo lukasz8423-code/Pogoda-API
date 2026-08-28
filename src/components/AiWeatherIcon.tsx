@@ -26,7 +26,7 @@ interface AiWeatherIconProps {
 export default function AiWeatherIcon({
   code,
   isDay,
-  cloudCover: _cloudCover = 0,
+  cloudCover = 0,
   precip = 0,
   className = "",
   size = "md"
@@ -90,7 +90,21 @@ export default function AiWeatherIcon({
         label: "Lekki deszcz"
       };
     }
-    if (effectiveCode >= 3) {
+    let visualCode = effectiveCode;
+    // For non-precipitating codes (0-3), align visual code with optical cloud cover
+    if (isZeroPrecip && effectiveCode <= 3 && typeof cloudCover === "number" && !isNaN(cloudCover)) {
+      if (cloudCover <= 15) {
+        visualCode = 0;
+      } else if (cloudCover <= 40) {
+        visualCode = 1;
+      } else if (cloudCover <= 75) {
+        visualCode = 2;
+      } else {
+        visualCode = 3;
+      }
+    }
+
+    if (visualCode >= 3) {
       return {
         icon: Cloud,
         color: "text-slate-200",
@@ -101,7 +115,7 @@ export default function AiWeatherIcon({
         label: "Pochmurno"
       };
     }
-    if (effectiveCode === 2) {
+    if (visualCode === 2) {
       return {
         icon: isDay ? CloudSun : CloudMoon,
         color: isDay ? "text-amber-200" : "text-indigo-200",
@@ -112,7 +126,7 @@ export default function AiWeatherIcon({
         label: "Umiarkowane zachmurzenie"
       };
     }
-    if (effectiveCode === 1) {
+    if (visualCode === 1) {
       return {
         icon: isDay ? CloudSun : CloudMoon,
         color: isDay ? "text-amber-200" : "text-indigo-200",

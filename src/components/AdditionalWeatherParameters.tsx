@@ -49,9 +49,9 @@ const AdditionalWeatherParameters: React.FC<Props> = ({ current }) => {
       {parameters.map((param, index) => (
         <div key={index} title={param.desc} className="bg-white/5 border border-white/10 rounded-2xl p-3 flex flex-col items-center justify-center text-center hover:bg-white/10 transition-colors cursor-help">
           <param.icon className="w-4 h-4 text-blue-400 mb-1.5" />
-          <span className="text-[10px] text-slate-400 uppercase tracking-wider font-bold">{param.label}</span>
+          <span className="text-[10px] text-slate-200 uppercase tracking-wider font-bold">{param.label}</span>
           <span className="text-sm font-semibold text-white mt-0.5">{param.value}</span>
-          <span className="text-[9px] text-slate-400 font-mono mt-1">{param.source}</span>
+          <span className="text-[9px] text-slate-300 font-mono mt-1">{param.source}</span>
         </div>
       ))}
     </div>

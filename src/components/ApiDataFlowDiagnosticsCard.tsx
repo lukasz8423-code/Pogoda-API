@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
 import { 
+  Activity, 
   Cpu, 
+  Layers, 
+  ArrowRight, 
   CheckCircle2, 
+  AlertCircle, 
+  HelpCircle, 
   Copy, 
   Check, 
   Droplet, 
@@ -13,9 +18,11 @@ import {
   FileCode,
   Sparkles,
   MapPin,
+  Compass,
   Radio
 } from 'lucide-react';
 import { ApiFieldDiagnostic, WeatherResponse } from '../types';
+import { getDistanceKm } from '../utils/distance';
 
 interface Props {
   data: WeatherResponse;

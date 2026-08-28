@@ -86,10 +86,11 @@ export async function fetchNearestImgwStation(userLat: number, userLng: number):
         console.warn("Backend IMGW proxy call skipped/failed, trying direct fetch:", apiErr);
       }
 
-    // Fetch live meteo network and synop in parallel
+    // Fetch live meteo network and synop in parallel with cache-busting timestamp (?t=Date.now())
+    const ts = Date.now();
     const [meteoRes, synopRes] = await Promise.allSettled([
-      smartFetch("https://danepubliczne.imgw.pl/api/data/meteo"),
-      smartFetch("https://danepubliczne.imgw.pl/api/data/synop")
+      smartFetch(`https://danepubliczne.imgw.pl/api/data/meteo?t=${ts}`),
+      smartFetch(`https://danepubliczne.imgw.pl/api/data/synop?t=${ts}`)
     ]);
 
     // Build synop pressure dictionary (normalized name -> synop item)
@@ -296,34 +297,32 @@ export async function fetchNearestImgwStation(userLat: number, userLng: number):
 export const fetchNearestImgwSynop = fetchNearestImgwStation;
 
 export async function fetchNearestImgwHydro(userLat: number, userLng: number) {
-  try {
-    // 1. Try backend proxy route on Web
+  const cacheKey = `imgw_hydro_${Math.round(userLat * 10)}_${Math.round(userLng * 10)}`;
+  return cachedFetch(cacheKey, async () => {
     try {
-      const apiRes = await fetch(`/api/imgw/hydro?lat=${userLat}&lng=${userLng}`);
-      if (apiRes.ok) {
-        const apiData = await apiRes.json();
-        if (apiData && apiData.stations) {
-          return apiData;
+      // 1. Try backend proxy route on Web
+      try {
+        const apiRes = await fetch(`/api/imgw/hydro?lat=${userLat}&lng=${userLng}`);
+        if (apiRes.ok) {
+          const apiData = await apiRes.json();
+          if (apiData && apiData.stations) {
+            return apiData;
+          }
         }
+      } catch (proxyErr) {
+        // Backend proxy unavailable or skipped
       }
-    } catch (proxyErr) {
-      // Backend proxy unavailable or skipped
-    }
 
-    // 2. Direct fetch fallback with timeout
-    const res = await smartFetch("https://danepubliczne.imgw.pl/api/data/hydro", {}, 4000);
-    if (!res || !res.ok) return null;
-    const stations = await res.json();
-    return {
-      stations: Array.isArray(stations) ? stations.slice(0, 10) : [],
-      source: "IMGW-PIB (Monitor)"
-    };
-  } catch (err: any) {
-    if (err?.name === "AbortError" || err?.message?.includes("aborted")) {
-      console.warn("IMGW Hydro fetch aborted / timed out.");
-    } else {
-      console.warn("IMGW Hydro fetch notice:", err);
+      // 2. Direct fetch fallback with timeout
+      const res = await smartFetch("https://danepubliczne.imgw.pl/api/data/hydro", {}, 7000);
+      if (!res || !res.ok) return { stations: [], source: "IMGW-PIB Hydrologia" };
+      const stations = await res.json();
+      return {
+        stations: Array.isArray(stations) ? stations.slice(0, 10) : [],
+        source: "IMGW-PIB (Monitor)"
+      };
+    } catch (err: any) {
+      return { stations: [], source: "IMGW-PIB Hydrologia" };
     }
-    return null;
-  }
+  }, CACHE_TTLS.IMGW);
 }

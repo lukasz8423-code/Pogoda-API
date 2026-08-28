@@ -13,7 +13,7 @@ const PORT = 3000;
 app.use(express.json());
 
 // Disable caching globally for all responses so browser always gets fresh HTML, JS, and API responses
-app.use((_req, res, next) => {
+app.use((req, res, next) => {
   res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
   res.setHeader("Pragma", "no-cache");
   res.setHeader("Expires", "0");
@@ -22,6 +22,7 @@ app.use((_req, res, next) => {
 });
 
 // Removed Gemini AI initialization as requested
+const apiKey = process.env.GEMINI_API_KEY?.trim();
 
 // Ensure humidity is within 0-100 range without artificial scaling or "fixing" low values
 function normalizeHumidity(val: any): number | null {
@@ -41,6 +42,21 @@ const GIOS_STATIONS_CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
 const GIOS_AQI_CACHE_TTL = 30 * 60 * 1000; // 30 minutes
 let giosStationsCache: { data: any[]; timestamp: number } | null = null;
 const giosAqiCache = new Map<number, { data: any; timestamp: number }>();
+
+// IMGW Hydro Cache (hydrological stations update hourly)
+const IMGW_HYDRO_CACHE_TTL = 15 * 60 * 1000; // 15 minutes
+let imgwHydroCache: { data: any[]; timestamp: number } | null = null;
+
+/**
+ * Returns raw API shortwave radiation or null if unavailable.
+ * No custom modeling or time-based attenuation.
+ */
+function calculateSolarRadiation(cloudCoverPercent: number, isDayTime: boolean = true, rawApiShortwave?: number): number | null {
+  if (typeof rawApiShortwave === 'number' && !isNaN(rawApiShortwave) && rawApiShortwave >= 0) {
+    return Math.round(rawApiShortwave);
+  }
+  return null;
+}
 
 function normalizeStationName(str: string): string {
   return (str || "")
@@ -88,7 +104,7 @@ function formatUtcToPolishTime(dateStr: string, hourStr?: string): string {
   return `${dateStr} ${hourStr || ''}:00`;
 }
 
-async function fetchWithRetry(url: string, retries = 2, timeoutMs = 4000): Promise<Response | null> {
+async function fetchWithRetry(url: string, retries = 2, timeoutMs = 6000): Promise<Response | null> {
   for (let i = 0; i < retries; i++) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -107,10 +123,15 @@ async function fetchWithRetry(url: string, retries = 2, timeoutMs = 4000): Promi
         return res;
       }
       
-      console.warn(`Fetch failed for ${url} (attempt ${i + 1}/${retries}): Status ${res.status}`);
-    } catch (err) {
+      if (i === retries - 1) {
+        console.warn(`Fetch returned status ${res.status} for ${url}`);
+      }
+    } catch (err: any) {
       clearTimeout(timeout);
-      console.warn(`Fetch failed for ${url} (attempt ${i + 1}/${retries}): ${err}`);
+      const isAbort = err?.name === 'AbortError' || String(err).includes('aborted');
+      if (i === retries - 1 && !isAbort) {
+        console.warn(`Fetch notice for ${url}: ${err?.message || err}`);
+      }
     }
     if (i < retries - 1) await new Promise(resolve => setTimeout(resolve, 500));
   }
@@ -155,20 +176,20 @@ function parseMetNorwayToWeatherData(data: any): any {
   const curUv = inst.ultraviolet_index_clear_sky ?? null;
 
   const hourlyTime: string[] = [];
-  const hourlyTemp: (number | null)[] = [];
-  const hourlyHum: (number | null)[] = [];
-  const hourlyAppTemp: (number | null)[] = [];
-  const hourlyWind: (number | null)[] = [];
-  const hourlyWindDir: (number | null)[] = [];
-  const hourlyPressure: (number | null)[] = [];
-  const hourlyPrecipProb: (number | null)[] = [];
-  const hourlyPrecip: (number | null)[] = [];
-  const hourlyUv: (number | null)[] = [];
-  const hourlyCloud: (number | null)[] = [];
+  const hourlyTemp: number[] = [];
+  const hourlyHum: number[] = [];
+  const hourlyAppTemp: number[] = [];
+  const hourlyWind: number[] = [];
+  const hourlyWindDir: number[] = [];
+  const hourlyPressure: number[] = [];
+  const hourlyPrecipProb: number[] = [];
+  const hourlyPrecip: number[] = [];
+  const hourlyUv: number[] = [];
+  const hourlyCloud: number[] = [];
   const hourlyCode: number[] = [];
   const hourlyIsDay: number[] = [];
 
-  const dailyMap = new Map<string, { temps: (number | null)[]; precips: (number | null)[]; uvs: (number | null)[]; winds: (number | null)[]; codes: number[]; probs: (number | null)[] }>();
+  const dailyMap = new Map<string, { temps: number[]; precips: number[]; uvs: number[]; winds: number[]; codes: number[]; probs: number[] }>();
 
   for (const step of timeseries.slice(0, 48)) {
     const stInst = step.data?.instant?.details || {};
@@ -217,12 +238,12 @@ function parseMetNorwayToWeatherData(data: any): any {
 
   const dailyTime: string[] = [];
   const dailyCode: number[] = [];
-  const dailyTempMax: (number | null)[] = [];
-  const dailyTempMin: (number | null)[] = [];
-  const dailyUvMax: (number | null)[] = [];
-  const dailyPrecipSum: (number | null)[] = [];
-  const dailyPrecipProbMax: (number | null)[] = [];
-  const dailyWindMax: (number | null)[] = [];
+  const dailyTempMax: number[] = [];
+  const dailyTempMin: number[] = [];
+  const dailyUvMax: number[] = [];
+  const dailyPrecipSum: number[] = [];
+  const dailyPrecipProbMax: number[] = [];
+  const dailyWindMax: number[] = [];
 
   const safeMax = (arr: any[]) => {
     const filtered = arr.filter(v => typeof v === 'number' && !isNaN(v));
@@ -319,9 +340,10 @@ function parseMetNorwayToWeatherData(data: any): any {
  */
 async function fetchUnifiedImgwStation(userLat: number, userLng: number) {
   try {
+    const ts = Date.now();
     const [meteoRes, synopRes] = await Promise.all([
-      fetchWithRetry("https://danepubliczne.imgw.pl/api/data/meteo"),
-      fetchWithRetry("https://danepubliczne.imgw.pl/api/data/synop")
+      fetchWithRetry(`https://danepubliczne.imgw.pl/api/data/meteo?t=${ts}`),
+      fetchWithRetry(`https://danepubliczne.imgw.pl/api/data/synop?t=${ts}`)
     ]);
 
     // Build synop lookup dictionary for barometric pressure
@@ -548,29 +570,56 @@ async function fetchGiosAirQuality(userLat: number, userLng: number) {
  * Fetches Hydrological data from IMGW-PIB API.
  * Returns water levels for the nearest measurement point.
  */
-async function fetchImgwHydroData(_userLat: number, _userLng: number) {
+async function fetchImgwHydroData(userLat: number, userLng: number) {
   try {
-    const res = await fetchWithRetry("https://danepubliczne.imgw.pl/api/data/hydro");
-    if (!res || !res.ok) return null;
-    const hydroList = await res.json();
-    if (!Array.isArray(hydroList)) return null;
+    let hydroList: any[] | null = null;
 
-    // Find nearest water station
-    // Note: IMGW Hydro API doesn't provide lat/lng directly in the list, 
-    // but we can match by name or use a pre-defined list if we had one.
-    // For now, we return the list to let the client or a filter handle it, 
-    // or we can just pick the 3 closest if we had coords.
-    // Simplified: we'll return a placeholder or look for specific known stations if they match the area.
-    
-    // Actually, IMGW Hydro API gives 'stacja', 'rzeka', 'stan_wody'.
-    // Without coordinates in the API response, we'd need a lookup table.
+    // 1. Check in-memory cache
+    if (imgwHydroCache && (Date.now() - imgwHydroCache.timestamp < IMGW_HYDRO_CACHE_TTL) && Array.isArray(imgwHydroCache.data)) {
+      hydroList = imgwHydroCache.data;
+    } else {
+      // 2. Fetch fresh data with 7000ms timeout
+      const res = await fetchWithRetry("https://danepubliczne.imgw.pl/api/data/hydro", 2, 7000);
+      if (res && res.ok) {
+        const parsed = await res.json();
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          hydroList = parsed;
+          imgwHydroCache = { data: parsed, timestamp: Date.now() };
+        }
+      }
+    }
+
+    // 3. Fallback to stale cache if fresh fetch failed
+    if (!hydroList && imgwHydroCache && Array.isArray(imgwHydroCache.data)) {
+      hydroList = imgwHydroCache.data;
+    }
+
+    if (!hydroList || !Array.isArray(hydroList)) {
+      return { stations: [], source: "IMGW-PIB Hydrologia" };
+    }
+
+    // 4. Calculate distance to user coordinates and return 10 nearest stations
+    const stationsWithDistance = hydroList
+      .filter((s: any) => s && (s.lat || s.lon || s.stacja))
+      .map((s: any) => {
+        const sLat = parseFloat(s.lat);
+        const sLng = parseFloat(s.lon);
+        const dist = (!isNaN(sLat) && !isNaN(sLng))
+          ? getDistanceKm(userLat, userLng, sLat, sLng)
+          : 999;
+        return { ...s, distance_km: dist };
+      })
+      .sort((a: any, b: any) => a.distance_km - b.distance_km);
+
     return {
-      stations: hydroList.slice(0, 10), // Return sample for now
+      stations: stationsWithDistance.slice(0, 10),
       source: "IMGW-PIB Hydrologia"
     };
-  } catch (err) {
-    console.warn("IMGW Hydro API fetch warning:", err);
-    return null;
+  } catch (err: any) {
+    if (imgwHydroCache && Array.isArray(imgwHydroCache.data)) {
+      return { stations: imgwHydroCache.data.slice(0, 10), source: "IMGW-PIB Hydrologia (Cache)" };
+    }
+    return { stations: [], source: "IMGW-PIB Hydrologia" };
   }
 }
 
@@ -632,7 +681,7 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     return res.status(400).json({ error: "Szerokość i długość geograficzna są wymagane (lat, lng)." });
   }
 
-  const isForce = req.query.force === "true" || req.query.refresh === "true" || req.headers["cache-control"] === "no-cache";
+  const isForce = req.query.force === "true" || req.query.refresh === "true" || req.headers["cache-control"] === "no-cache" || req.query.t !== undefined;
   const geoKey = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
   const cachedWeather = weatherResponseCache.get(geoKey);
   if (!isForce && cachedWeather && (Date.now() - cachedWeather.timestamp < WEATHER_CACHE_TTL_MS)) {
@@ -684,7 +733,7 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
     let omBase = apiKey ? "https://customer-api.open-meteo.com/v1/forecast" : "https://api.open-meteo.com/v1/forecast";
     let auth = apiKey ? `&apikey=${apiKey}` : "";
 
-    let openMeteoUrl = `${omBase}?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,visibility,shortwave_radiation,direct_normal_irradiance,lightning_potential&minutely_15=precipitation,precipitation_probability,rain,snowfall&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl,precipitation_probability,precipitation,uv_index,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,shortwave_radiation,direct_normal_irradiance,is_day,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,soil_temperature_0cm,evapotranspiration,lightning_potential&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code&forecast_days=3&timezone=auto${auth}`;
+    let openMeteoUrl = `${omBase}?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,visibility,shortwave_radiation,direct_normal_irradiance,lightning_potential&minutely_15=precipitation,precipitation_probability,rain,snowfall&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl,precipitation_probability,precipitation,uv_index,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,shortwave_radiation,direct_normal_irradiance,is_day,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,soil_temperature_0cm,evapotranspiration,lightning_potential&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code&forecast_days=3&past_days=1&timezone=auto${auth}`;
     try {
       console.log(`Fetching weather from Open-Meteo: ${openMeteoUrl.split('&apikey=')[0]}...`);
       let res = await fetchWithRetry(openMeteoUrl);
@@ -694,7 +743,7 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         console.warn("Open-Meteo returned 400 with API key, falling back to public endpoint...");
         omBase = "https://api.open-meteo.com/v1/forecast";
         auth = "";
-        openMeteoUrl = `${omBase}?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,visibility,shortwave_radiation,direct_normal_irradiance,lightning_potential&minutely_15=precipitation,precipitation_probability,rain,snowfall&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl,precipitation_probability,precipitation,uv_index,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,shortwave_radiation,direct_normal_irradiance,is_day,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,soil_temperature_0cm,evapotranspiration,lightning_potential&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code&forecast_days=3&timezone=auto`;
+        openMeteoUrl = `${omBase}?latitude=${lat}&longitude=${lng}&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,precipitation,rain,showers,snowfall,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,pressure_msl,wind_speed_10m,wind_gusts_10m,wind_direction_10m,uv_index,visibility,shortwave_radiation,direct_normal_irradiance,lightning_potential&minutely_15=precipitation,precipitation_probability,rain,snowfall&hourly=temperature_2m,relative_humidity_2m,apparent_temperature,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl,precipitation_probability,precipitation,uv_index,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,shortwave_radiation,direct_normal_irradiance,is_day,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,soil_temperature_0cm,evapotranspiration,lightning_potential&daily=sunrise,sunset,temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,uv_index_max,precipitation_sum,precipitation_probability_max,wind_speed_10m_max,wind_gusts_10m_max,weather_code&forecast_days=3&past_days=1&timezone=auto`;
         res = await fetchWithRetry(openMeteoUrl);
       }
 
@@ -905,6 +954,23 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
 
     weatherData.activeServers = activeServers;
 
+    const baseTemp = weatherData.current?.temperature_2m ?? (weatherData.hourly?.temperature_2m?.[0] ?? null);
+    const baseHum = normalizeHumidity(weatherData.current?.relative_humidity_2m ?? (weatherData.hourly?.relative_humidity_2m?.[0] ?? null));
+    const c = weatherData.current ?? {};
+    const baseWind = weatherData.current?.wind_speed_10m ?? null;
+
+    // Calculate Perceived Optical Cloud Cover & Ground Truth Solar Irradiance:
+    const lowC = typeof c.cloud_cover_low === 'number' ? c.cloud_cover_low : null;
+    const midC = typeof c.cloud_cover_mid === 'number' ? c.cloud_cover_mid : null;
+    const highC = typeof c.cloud_cover_high === 'number' ? c.cloud_cover_high : null;
+    const totalC = typeof c.cloud_cover === 'number' ? c.cloud_cover : null;
+    const isDay = c.is_day === 1;
+
+    const swRad = typeof c.shortwave_radiation === 'number' ? c.shortwave_radiation : null;
+    const dniRad = typeof c.direct_normal_irradiance === 'number' ? c.direct_normal_irradiance : null;
+    const uvVal = typeof c.uv_index === 'number' ? c.uv_index : null;
+    const precipVal = typeof c.precipitation === 'number' ? c.precipitation : null;
+
     if (weatherData.current) {
       weatherData.current.relative_humidity_2m = normalizeHumidity(weatherData.current.relative_humidity_2m);
 
@@ -912,8 +978,24 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
         ? Math.min(100, Math.max(0, Math.round(weatherData.current.cloud_cover)))
         : null;
 
+      const lowC = typeof weatherData.current.cloud_cover_low === 'number' ? weatherData.current.cloud_cover_low : 0;
+      const midC = typeof weatherData.current.cloud_cover_mid === 'number' ? weatherData.current.cloud_cover_mid : 0;
+      const highC = typeof weatherData.current.cloud_cover_high === 'number' ? weatherData.current.cloud_cover_high : 0;
+      
+      const lowFrac = Math.min(100, Math.max(0, lowC)) / 100;
+      const midFrac = Math.min(100, Math.max(0, midC)) / 100;
+      const highFrac = Math.min(100, Math.max(0, highC)) / 100;
+
+      const effectiveLow = lowFrac * 1.0;
+      const remAfterLow = 1 - lowFrac;
+      const effectiveMid = remAfterLow * midFrac * 0.55;
+      const remAfterMid = remAfterLow * (1 - midFrac);
+      const effectiveHigh = remAfterMid * highFrac * 0.15;
+      const opticalCloud = Math.min(100, Math.max(0, Math.round((effectiveLow + effectiveMid + effectiveHigh) * 100)));
+
       weatherData.current.cloud_cover = rawCloud;
-      weatherData.current.perceived_cloud_cover = rawCloud;
+      weatherData.current.perceived_cloud_cover = (lowC > 0 || midC > 0 || highC > 0) ? opticalCloud : rawCloud;
+      weatherData.current.optical_cloud_cover = opticalCloud;
 
       weatherData.current.fusion_metadata = {
         applied_filters: ["ECMWF_IFS", "DWD_ICON_EU", "IMGW_TELEMETRY"],
@@ -1076,8 +1158,8 @@ app.get(["/api/weather", "/api/pogoda"], async (req, res) => {
             }
           }
 
-          if (((precipSum ?? 0) >= 0.2 || (maxPop ?? 0) >= 40) && maxScore < 70) {
-            return (maxPop ?? 0) >= 60 ? 80 : 51;
+          if ((precipSum >= 0.2 || maxPop >= 40) && maxScore < 70) {
+            return maxPop >= 60 ? 80 : 51;
           }
 
           return bestCode;
@@ -1221,7 +1303,64 @@ app.get("/api/stations", async (req, res) => {
     return res.json(cachedStation.data);
   }
 
+  const apiKey = process.env.OPENMETEO_API_KEY;
+  let omBase = apiKey ? "https://customer-api.open-meteo.com/v1/forecast" : "https://api.open-meteo.com/v1/forecast";
+  let auth = apiKey ? `&apikey=${apiKey}` : "";
+
   try {
+    const response = await fetchWithRetry(`${omBase}?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,cloud_cover,pressure_msl,wind_speed_10m,wind_direction_10m,soil_temperature_0cm,soil_moisture_0_to_1cm,shortwave_radiation${auth}`);
+
+    let data: any = {};
+    if (response && response.ok) {
+      data = await response.json().catch(() => ({}));
+    } else {
+      const weatherCached = weatherResponseCache.get(geoKey);
+      if (weatherCached && weatherCached.data && weatherCached.data.weather && weatherCached.data.weather.current) {
+        data = { current: weatherCached.data.weather.current };
+      }
+    }
+    const cur = data.current ?? {};
+    const cloudCover = cur.cloud_cover ?? null;
+    const isDayTime = cur.is_day !== undefined ? (cur.is_day === 1) : true;
+    
+    // Solar radiation calculated strictly according to solar zenith and cloud transmittance physics
+    const solarRadiation = calculateSolarRadiation(cloudCover, isDayTime, cur.shortwave_radiation);
+
+    const baseTemp = cur.temperature_2m ?? null;
+    const baseHumidity = normalizeHumidity(cur.relative_humidity_2m);
+    const baseWind = cur.wind_speed_10m ?? null;
+    const basePressure = cur.pressure_msl ?? null;
+
+    const soilTemp = cur.soil_temperature_0cm ?? baseTemp;
+    
+    const sm0 = cur.soil_moisture_0_to_1cm;
+    const weatherCached = weatherResponseCache.get(geoKey);
+    const cachedMoisture = weatherCached?.data?.weather?.current?.soil_moisture_satellite;
+    let soilMoisture = null;
+    if (typeof cachedMoisture === 'number') {
+      soilMoisture = cachedMoisture;
+    } else if (typeof cur.soil_moisture_satellite === 'number') {
+      soilMoisture = cur.soil_moisture_satellite;
+    } else if (sm0 !== undefined && sm0 !== null) {
+      soilMoisture = Math.round(sm0 > 1 ? sm0 : sm0 * 100);
+    }
+
+    const rainRate = cur.precipitation ?? null;
+    const weatherCode = cur.weather_code ?? cur.weathercode ?? 0;
+
+    const calcLeafWetness = (humidityVal: number | null, rainVal: number | null, wCode?: number) => {
+      const code = wCode ?? weatherCode;
+      const isPrecip = (rainVal !== null && rainVal > 0) || (typeof code === 'number' && code >= 50 && code <= 99);
+      if (humidityVal === null && rainVal === null && !code) return { leafWetness: null, leafWetnessText: "Brak danych" };
+      let index = 0;
+      if (isPrecip) index = 13;
+      else if (typeof code === 'number' && code >= 20 && code <= 29) index = 10;
+      else if (humidityVal !== null && humidityVal >= 90) index = 8;
+      else if (humidityVal !== null && humidityVal >= 80) index = 5;
+      else if (humidityVal !== null && humidityVal >= 65) index = 2;
+      else index = 0;
+      return { leafWetness: index, leafWetnessText: `${index}/15` };
+    };
 
     let stations: any[] = [];
     let giosAir: any = null;
@@ -1262,12 +1401,18 @@ app.get("/api/stations", async (req, res) => {
   }
 });
 
+// Safe helper - AI disabled
+async function callGeminiWithFallback(prompt: string, responseMimeType: string = "application/json"): Promise<string | null> {
+  return null;
+}
+
 // Auxiliary function: generate highly detailed local weather recommendations if Gemini API is unavailable/fails
-function getLocalAdviceFallback(city: string, current: any, _daily: any, mode?: string) {
+function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: string) {
   const satMoisture = typeof current?.soil_moisture_satellite === "number" ? current.soil_moisture_satellite : null;
-  const temp = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : 0;
+  const temp = typeof current?.temperature_2m === 'number' ? Math.round(current.temperature_2m) : null;
   const cloud = typeof current?.cloud_cover === 'number' ? Math.round(current.cloud_cover) : null;
   const press = typeof current?.pressure_msl === 'number' ? Math.round(current.pressure_msl) : null;
+  const uv = typeof current?.uv_index === 'number' ? current.uv_index : null;
 
   if (mode === "ciekawostka") {
     const triviaFacts = [
@@ -1706,7 +1851,7 @@ setInterval(() => {
 }, 60000);
 
 // API Route: Google Cloud Storage - Get user data
-app.get("/api/cloud-storage", (_req, res) => {
+app.get("/api/cloud-storage", (req, res) => {
   res.json({ success: true, data: cloudStorageStore, timestamp: new Date().toISOString() });
 });
 
@@ -1724,7 +1869,7 @@ app.post("/api/cloud-storage", (req, res) => {
 });
 
 // API Route: Weather Server Sync Schedule & Manual Reset
-app.get("/api/weather/sync-schedule", (_req, res) => {
+app.get("/api/weather/sync-schedule", (req, res) => {
   res.json({
     success: true,
     ...weatherSyncScheduleState,
@@ -1732,7 +1877,7 @@ app.get("/api/weather/sync-schedule", (_req, res) => {
   });
 });
 
-app.post("/api/weather/force-sync", (_req, res) => {
+app.post("/api/weather/force-sync", (req, res) => {
   weatherSyncScheduleState.lastScheduledSync = new Date().toISOString();
   weatherSyncScheduleState.status = "Wymuszono świeże pobranie z serwera pogodowego";
   console.log("[Aura Weather Sync] Manual server reset & sync requested.");

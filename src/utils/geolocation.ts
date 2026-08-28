@@ -155,15 +155,49 @@ export async function reverseGeocode(lat: number, lng: number): Promise<string |
 }
 
 /**
- * Returns the user's last valid location in Poland from localStorage,
+ * Returns the user's last valid GPS location in Poland from localStorage,
  * or safely falls back to Lipno (52.8441, 19.1772).
+ * Never uses manual city searches (like Łódź) as a GPS fallback.
  */
 export async function getLastValidLocationOrFallback(): Promise<DetectedLocation> {
-  // 1. Check for last valid saved coordinates in localStorage
+  // 1. First check if real GPS coordinates were previously stored
   try {
+    const gpsCoordsStr = localStorage.getItem("aura_gps_coords");
+    const gpsCityStr = localStorage.getItem("aura_gps_city");
+    if (gpsCoordsStr) {
+      const parsed = JSON.parse(gpsCoordsStr);
+      if (
+        parsed &&
+        typeof parsed.lat === "number" &&
+        typeof parsed.lng === "number" &&
+        !isNaN(parsed.lat) &&
+        !isNaN(parsed.lng) &&
+        isPolandCoordinates(parsed.lat, parsed.lng)
+      ) {
+        console.log(`📍 [Geo] Użyto zapisanych współrzędnych GPS: lat=${parsed.lat}, lng=${parsed.lng}${gpsCityStr ? `, miasto=${gpsCityStr}` : ""}`);
+        let city = isValidCityName(gpsCityStr || undefined) ? gpsCityStr!.trim() : undefined;
+        if (!city) {
+          city = await reverseGeocode(parsed.lat, parsed.lng);
+        }
+        const finalCity = city || "Lokalizacja GPS";
+        return {
+          lat: parsed.lat,
+          lng: parsed.lng,
+          cityName: finalCity,
+          method: "cached"
+        };
+      }
+    }
+  } catch (e) {
+    console.warn("Error reading GPS location from storage:", e);
+  }
+
+  // 2. Check aura_last_coords ONLY IF saved method was 'gps' (not manual city search)
+  try {
+    const savedMethod = localStorage.getItem("aura_last_method");
     const savedCoordsStr = localStorage.getItem("aura_last_coords");
     const savedCityStr = localStorage.getItem("aura_last_city");
-    if (savedCoordsStr) {
+    if (savedMethod === "gps" && savedCoordsStr) {
       const parsed = JSON.parse(savedCoordsStr);
       if (
         parsed &&
@@ -173,14 +207,12 @@ export async function getLastValidLocationOrFallback(): Promise<DetectedLocation
         !isNaN(parsed.lng) &&
         isPolandCoordinates(parsed.lat, parsed.lng)
       ) {
-        console.log(`📍 [Geo] Użyto ostatniej prawidłowej lokalizacji: lat=${parsed.lat}, lng=${parsed.lng}${savedCityStr ? `, miasto=${savedCityStr}` : ""}`);
+        console.log(`📍 [Geo] Użyto ostatniej pozycji GPS: lat=${parsed.lat}, lng=${parsed.lng}${savedCityStr ? `, miasto=${savedCityStr}` : ""}`);
         let city = isValidCityName(savedCityStr || undefined) ? savedCityStr!.trim() : undefined;
         if (!city) {
           city = await reverseGeocode(parsed.lat, parsed.lng);
-          console.log(`📍 [Geo] Wynik reverse geocodingu: ${city || "brak"}`);
         }
         const finalCity = city || "Poprzednia lokalizacja";
-        console.log(`📍 [Geo] Finalna lokalizacja użyta przez aplikację: lat=${parsed.lat}, lng=${parsed.lng}, miasto=${finalCity}`);
         return {
           lat: parsed.lat,
           lng: parsed.lng,
@@ -193,7 +225,7 @@ export async function getLastValidLocationOrFallback(): Promise<DetectedLocation
     console.warn("Error reading last valid location from storage:", e);
   }
 
-  // 2. Safe Fallback: Lipno (52.8441, 19.1772)
+  // 3. Safe Fallback: Lipno (52.8441, 19.1772)
   console.log("📍 [Geo] Użyto fallbacku Lipno: lat=52.8441, lng=19.1772");
   let city = await reverseGeocode(52.8441, 19.1772);
   console.log(`📍 [Geo] Wynik reverse geocodingu: ${city || "Lipno"}`);
@@ -208,9 +240,10 @@ export async function getLastValidLocationOrFallback(): Promise<DetectedLocation
 }
 
 export async function detectUserLocation(
-  options?: { timeoutMs?: number }
+  options?: { timeoutMs?: number; allowFallback?: boolean }
 ): Promise<DetectedLocation> {
   const timeoutMs = options?.timeoutMs || 15000;
+  const allowFallback = options?.allowFallback !== false; // defaults to true for initial startup, false for explicit GPS button
 
   // Helper: Try Geolocation (Capacitor Native or Browser)
   const getGps = async (highAccuracy: boolean, timeout: number): Promise<{ latitude: number; longitude: number; accuracy: number }> => {
@@ -232,7 +265,7 @@ export async function detectUserLocation(
           const pos = await Geolocation.getCurrentPosition({
             enableHighAccuracy: highAccuracy,
             timeout: timeout,
-            maximumAge: highAccuracy ? 0 : 30000
+            maximumAge: 0
           });
           console.log("📍 [Geo RAW GPS] lat:", pos.coords.latitude, "lng:", pos.coords.longitude, "accuracy:", pos.coords.accuracy);
           return {
@@ -242,7 +275,7 @@ export async function detectUserLocation(
           };
         } else {
           console.warn("⚠️ [Geo] Location permission was not granted by user:", perm.location);
-          throw new Error("Dostęp do lokalizacji GPS został odrzucony w ustawieniach systemu Android.");
+          throw new Error("Dostęp do lokalizacji GPS został odrzucony w ustawieniach urządzenia.");
         }
       } catch (e: any) {
         console.warn("⚠️ [Geo] Capacitor Native Geolocation error:", e);
@@ -275,13 +308,13 @@ export async function detectUserLocation(
 
       // Hard timeout fallback in case browser prompt or iframe blocks callback
       timer = setTimeout(() => {
-        finishError(new Error(`Timeout geolokalizacji w przeglądarce (${timeout}ms)`));
+        finishError(new Error(`Przekroczono czas oczekiwania na sygnał GPS (${timeout}ms)`));
       }, timeout + 500);
 
       const geoOptions: PositionOptions = {
         enableHighAccuracy: highAccuracy,
         timeout: timeout,
-        maximumAge: 0 // Always enforce maximumAge: 0 to prevent browser from returning stale cached positions
+        maximumAge: 0 // Always enforce maximumAge: 0 to get fresh live GPS coordinates
       };
 
       try {
@@ -294,7 +327,15 @@ export async function detectUserLocation(
             });
           },
           (err) => {
-            finishError(err);
+            let errorMsg = "Nie udało się pobrać pozycji GPS.";
+            if (err.code === 1) { // PERMISSION_DENIED
+              errorMsg = "Dostęp do lokalizacji GPS został zablokowany w przeglądarce.";
+            } else if (err.code === 2) { // POSITION_UNAVAILABLE
+              errorMsg = "Sygnał GPS jest obecnie niedostępny.";
+            } else if (err.code === 3) { // TIMEOUT
+              errorMsg = "Przekroczono czas oczekiwania na sygnał GPS.";
+            }
+            finishError(new Error(errorMsg));
           },
           geoOptions
         );
@@ -308,6 +349,7 @@ export async function detectUserLocation(
   let foundGpsLng: number | null = null;
   let foundGpsAccuracy: number | null = null;
   let isGpsOutsidePoland = false;
+  let lastGpsError: any = null;
 
   // Step 1: Try High Accuracy GPS
   try {
@@ -326,7 +368,8 @@ export async function detectUserLocation(
       foundGpsLng = lng;
       foundGpsAccuracy = accuracy;
     }
-  } catch (err) {
+  } catch (err: any) {
+    lastGpsError = err;
     console.warn("⚠️ [Geo] Stage 1 High Accuracy GPS failed or timed out:", err);
   }
 
@@ -349,6 +392,7 @@ export async function detectUserLocation(
         foundGpsAccuracy = accuracy;
       }
     } catch (err: any) {
+      lastGpsError = err;
       console.warn("⚠️ [Geo] Stage 2 GPS failed or timed out:", err);
     }
   }
@@ -363,6 +407,14 @@ export async function detectUserLocation(
     const finalCity = geoCity || "Lokalizacja GPS";
     console.log(`📍 [Geo] Finalna lokalizacja użyta przez aplikację: lat=${lat}, lng=${lng}, miasto=${finalCity}`);
 
+    // Persist genuine GPS coordinates
+    try {
+      localStorage.setItem("aura_gps_coords", JSON.stringify({ lat, lng }));
+      if (isValidCityName(finalCity)) {
+        localStorage.setItem("aura_gps_city", finalCity);
+      }
+    } catch (e) {}
+
     return {
       lat,
       lng,
@@ -372,8 +424,17 @@ export async function detectUserLocation(
     };
   }
 
-  // If GPS was rejected as outside Poland OR failed/timed out:
-  // Activate clean fallback to last valid location or Lipno
+  // If allowFallback is FALSE (e.g. user explicitly clicked GPS return button):
+  // Throw error instead of silently returning previous manual city (e.g. Łódź) or Lipno!
+  if (!allowFallback) {
+    if (isGpsOutsidePoland) {
+      throw new Error("Wykryte współrzędne GPS znajdują się poza terytorium Polski.");
+    }
+    throw (lastGpsError || new Error("Nie udało się pobrać aktualnej pozycji GPS. Sprawdź uprawnienia do lokalizacji."));
+  }
+
+  // If GPS was rejected as outside Poland OR failed/timed out on startup:
+  // Activate clean fallback to last valid GPS location or Lipno
   return await getLastValidLocationOrFallback();
 }
 

@@ -1,5 +1,6 @@
+import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, GitMerge, Radio, Cloud, Gauge, Sparkles, ShieldCheck, CheckCircle2 } from "lucide-react";
+import { X, GitMerge, Cpu, Radio, Smartphone, Cloud, Gauge, Thermometer, Wind, Droplets, Sparkles, ShieldCheck, CheckCircle2 } from "lucide-react";
 
 interface DataFusionEngineModalProps {
   isOpen: boolean;
@@ -7,21 +8,21 @@ interface DataFusionEngineModalProps {
   fusionData: {
     stationName: string;
     stationDistance: string;
-    rawModelTemp: number | null;
-    stationTemp: number | null | undefined;
-    fusedTemp: number | null;
-    rawModelHumidity: number | null;
-    stationHumidity: number | null | undefined;
-    fusedHumidity: number | null;
-    rawModelWind: number | null;
-    stationWind: number | null | undefined;
-    fusedWind: number | null;
-    stationPressure: number | null;
+    rawModelTemp: number;
+    stationTemp: number;
+    fusedTemp: number;
+    rawModelHumidity: number;
+    stationHumidity: number;
+    fusedHumidity: number;
+    rawModelWind: number;
+    stationWind: number;
+    fusedWind: number;
+    stationPressure: number;
     phonePressure: number | null;
-    fusedPressure: number | null;
-    satelliteCloudCover: number | null;
+    fusedPressure: number;
+    satelliteCloudCover: number;
     sensorLux: number | null;
-    fusedCloudCover: number | null;
+    fusedCloudCover: number;
     isLuxClamped: boolean;
     fusionMetadata?: {
       cloud_disagreement: number;

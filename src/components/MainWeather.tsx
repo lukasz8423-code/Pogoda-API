@@ -1,12 +1,16 @@
-import { useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo } from "react";
 import { 
   MapPin, 
   RotateCw, 
   Search, 
   Locate,
+  Compass, 
   Wind, 
   Droplets, 
   Sun, 
+  Moon,
+  ArrowUp, 
+  ArrowDown, 
   Cloud,
   QrCode,
   CloudRain,
@@ -17,25 +21,60 @@ import {
   Sunset,
   ChevronUp,
   ChevronDown,
+  AlertCircle,
   AlertTriangle,
   RefreshCw,
+  Smartphone,
   Thermometer,
+  Activity,
+  GitMerge,
+  Sparkles,
+  Cpu,
   Gauge,
+  Tractor,
+  Satellite,
+  TrendingUp,
+  TrendingDown,
+  Layers,
+  Radio,
+  Sliders,
+  ShieldCheck,
+  Info,
   Tv,
+  Globe,
+  Wifi,
+  Camera,
+  HelpCircle,
+  LayoutDashboard,
   Waves,
   Sprout,
   Settings,
+  Zap
 } from "lucide-react";
+import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { WeatherResponse } from "../types";
+import WindCompassRose from "./WindCompassRose";
+import { WeatherResponse, WeatherAnalysis } from "../types";
 import { 
   getWeatherMeta, 
+  formatDayOfWeek, 
+  getWindDirection, 
+  getUvIndexDescription,
   calculateAdjustedUvIndex,
   calculateApparentTemperature,
+  getCalibratedTemperature,
+  getCalibratedTemperatureDetails,
+  sanitizeHourCode,
+  getCloudCoverLabel,
   getCityLocationString,
+  getWeatherDescription,
+  calculateOpticalCloudCover,
+  getOpticalCloudDescription
 } from "../utils/weatherUtils";
+import AnimatedWeatherIcon from "./AnimatedWeatherIcon";
 import AiWeatherIcon from "./AiWeatherIcon";
 import AmbientWeatherEffect from "./AmbientWeatherEffect";
+import WeatherAdviceCards from "./WeatherAdviceCards";
 import StormRadar from "./StormRadar";
 import WeatherSourceComparison from "./WeatherSourceComparison";
 import SatelliteStatusCard from "./SatelliteStatusCard";
@@ -44,7 +83,9 @@ import DataFusionEngineModal from "./DataFusionEngineModal";
 import RainAlertNowcastCard from "./RainAlertNowcastCard";
 import MeteoLcdConsole from "./MeteoLcdConsole";
 import QrCodeModal from "./QrCodeModal";
+import CloudLayersModal from "./CloudLayersModal";
 import PwaDiagnosticModal, { GeoDiagnosticInfo } from "./PwaDiagnosticModal";
+import AdditionalWeatherParameters from "./AdditionalWeatherParameters";
 import ApiDataFlowDiagnosticsCard from "./ApiDataFlowDiagnosticsCard";
 import NowcastPrecipitationAlert from "./NowcastPrecipitationAlert";
 import AgroFieldConditionsCard from "./AgroFieldConditionsCard";
@@ -54,6 +95,7 @@ import AirQualityCard from "./AirQualityCard";
 import HydrologyCard from "./HydrologyCard";
 import SavedPlacesSection from "./SavedPlacesSection";
 import HourlyWeatherChart from "./HourlyWeatherChart";
+import SmartWeatherAssistantCard from "./SmartWeatherAssistantCard";
 import { WeatherWarningsPlaceholder } from "./WeatherWarningsPlaceholder";
 import { detectUserLocation } from "../utils/geolocation";
 
@@ -64,13 +106,28 @@ interface MainWeatherProps {
   onRefresh: () => void;
   onBackToSearch: () => void;
   isRefreshing: boolean;
-  onLocationSelected?: (lat: number, lng: number, displayName?: string) => void;
+  onLocationSelected?: (lat: number, lng: number, displayName?: string, silent?: boolean, isManual?: boolean) => void;
   geoDiagnostic?: GeoDiagnosticInfo | null;
 }
+
+const gridVariants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.1 }
+  }
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 10 },
+  visible: { opacity: 1, y: 0 }
+};
 
 export default function MainWeather({ data, userLat, userLng, onRefresh, onBackToSearch, isRefreshing, onLocationSelected, geoDiagnostic }: MainWeatherProps) {
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [expandedDayIndex, setExpandedDayIndex] = useState<number | null | "all">(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
   const [sensorLux, setSensorLux] = useState<number | null>(null);
   const [lastCameraLuminance, setLastCameraLuminance] = useState<number | null>(null);
   const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment");
@@ -84,31 +141,31 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const [isPwaModalOpen, setIsPwaModalOpen] = useState(false);
   const [showLcdConsole, setShowLcdConsole] = useState(false);
   const [showAllDetails, setShowAllDetails] = useState(false);
-  const [, setIsMeasuringCameraLux] = useState(false);
-  const [, setCameraLuxError] = useState<string | null>(null);
+  const [isMeasuringCameraLux, setIsMeasuringCameraLux] = useState(false);
+  const [cameraLuxError, setCameraLuxError] = useState<string | null>(null);
 
   const [isLocating, setIsLocating] = useState(false);
   const [locationToast, setLocationToast] = useState<string | null>(null);
 
   const handleAutoDetectLocation = async () => {
     setIsLocating(true);
-    setLocationToast("Wykrywanie lokalizacji GPS / IP...");
+    setLocationToast("Wykrywanie bieżącej pozycji GPS...");
     try {
-      const loc = await detectUserLocation({ timeoutMs: 8000 });
+      const loc = await detectUserLocation({ timeoutMs: 10000, allowFallback: false });
       setIsLocating(false);
       if (onLocationSelected) {
-        onLocationSelected(loc.lat, loc.lng, loc.cityName);
+        onLocationSelected(loc.lat, loc.lng, loc.cityName, false, false);
       } else {
         onRefresh();
       }
-      const methodLabel = loc.method === "gps_high" || loc.method === "gps_low" ? "GPS" : "IP";
-      setLocationToast(`Pobrano lokalizację (${methodLabel}): ${loc.cityName || "Lokalizacja GPS"}`);
+      setLocationToast(`Pobrano pozycję GPS: ${loc.cityName || "Lokalizacja GPS"}`);
       setTimeout(() => setLocationToast(null), 4500);
-    } catch (err) {
+    } catch (err: any) {
       console.warn("Auto detect location failed:", err);
       setIsLocating(false);
-      setLocationToast("Nie udało się wykryć pozycji. Wybierz miasto z wyszukiwarki.");
-      setTimeout(() => setLocationToast(null), 3500);
+      const msg = err?.message || "Nie udało się pobrać pozycji GPS. Sprawdź uprawnienia do lokalizacji.";
+      setLocationToast(msg.includes("GPS") || msg.includes("lokalizacj") ? msg : `Błąd GPS: ${msg}`);
+      setTimeout(() => setLocationToast(null), 4500);
     }
   };
 
@@ -121,20 +178,21 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const [cloudSyncStatus, setCloudSyncStatus] = useState<string>("Zsynchronizowano z chmurą Google");
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [isFusionModalOpen, setIsFusionModalOpen] = useState(false);
+  const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
   const [phoneBarometer, setPhoneBarometer] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'satellites' | 'agro' | 'diagnostics'>('satellites');
   const [selectedStationOverride, setSelectedStationOverride] = useState<{
     id: string;
     name: string;
-    temp: number | null;
-    humidity: number | null;
-    windSpeed: number | null;
-    pressure: number | null;
+    temp: number;
+    humidity: number;
+    windSpeed: number;
+    pressure: number;
     distance: string;
   } | null>(null);
 
   const [dismissedRecs, setDismissedRecs] = useState<string[]>([]);
-  const [manualCloudCover] = useState<number | null>(null);
+  const [manualCloudCover, setManualCloudCover] = useState<number | null>(null);
   const [userWeatherOverrideCode, setUserWeatherOverrideCode] = useState<number | null>(() => {
     try {
       const saved = localStorage.getItem("aura_user_weather_override");
@@ -144,7 +202,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     }
   });
 
-  const [, setIsManualStationSelected] = useState(false);
+  const [isManualStationSelected, setIsManualStationSelected] = useState(false);
 
   useEffect(() => {
     if (data && data.imgwStation) {
@@ -357,6 +415,8 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     sunset: Array.isArray(rawDaily?.sunset) ? rawDaily.sunset : []
   };
   const isDay = current?.is_day === 1;
+  const weatherMeta = getWeatherMeta(current?.weather_code ?? 0, isDay, current?.cloud_cover ?? 0, current?.precipitation ?? 0);
+  const CurrentIcon = weatherMeta.icon;
 
   const getMatchedIndex = () => {
     try {
@@ -460,18 +520,27 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const rawCurrentHumidity = typeof current?.relative_humidity_2m === 'number' ? Math.round(current.relative_humidity_2m) : (typeof hourly.relative_humidity_2m?.[currentIdx] === 'number' ? Math.round(hourly.relative_humidity_2m[currentIdx]) : null);
   const rawCurrentPressure = typeof current?.pressure_msl === 'number' ? Math.round(current.pressure_msl) : (typeof hourly.pressure_msl?.[currentIdx] === 'number' ? Math.round(hourly.pressure_msl[currentIdx]) : null);
 
-  // By default use local high-precision forecast for searched city/GPS location. Override only if manually selected by user.
-  const activeStation = selectedStationOverride || data?.imgwStation || null;
+  // IMGW Ground-Truth Station logic: Prioritize IMGW telemetry station if within reliable range (<= 45km)
+  const isImgwReliable = data?.imgwStation && typeof data.imgwStation.temp === 'number' && !isNaN(data.imgwStation.temp) && (data.imgwStation.distanceKm === undefined || data.imgwStation.distanceKm <= 45);
+  const activeStation = selectedStationOverride || (isImgwReliable ? data?.imgwStation : null);
+
+  // Dynamic Calibration (Bias Correction):
+  const calibrationDetails = getCalibratedTemperatureDetails(
+    activeStation,
+    rawCurrentTemp,
+    hourly?.time,
+    hourly?.temperature_2m
+  );
+
+  const isUsingImgw = Boolean(activeStation && calibrationDetails.isCalibrated);
+  const currentTemp = calibrationDetails.calibratedTemp !== null ? calibrationDetails.calibratedTemp : rawCurrentTemp;
+  const tempBias = calibrationDetails.bias;
 
   const stTemp = activeStation?.temp;
   const stHumidity = activeStation?.humidity;
   const stWind = activeStation?.windSpeed;
   const stPressure = activeStation?.pressure || rawCurrentPressure;
   const stApparentTemp = (activeStation as any)?.apparentTemp ?? (activeStation as any)?.apparent_temperature ?? (activeStation as any)?.feelsLike ?? null;
-
-  const currentTemp = (activeStation && typeof stTemp === 'number' && !isNaN(stTemp))
-    ? stTemp
-    : rawCurrentTemp;
 
   const currentHumidityForApparent = (activeStation && typeof stHumidity === 'number' && !isNaN(stHumidity))
     ? Math.round(stHumidity)
@@ -481,13 +550,22 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     ? Math.round(stWind)
     : rawCurrentWindSpeed;
 
-  const calculatedStApparentTemp = (activeStation && typeof currentTemp === 'number' && currentHumidityForApparent !== null && currentWindSpeedForApparent !== null)
-    ? calculateApparentTemperature(currentTemp, currentHumidityForApparent, currentWindSpeedForApparent)
+  const calculatedStApparentTemp = (typeof currentTemp === 'number' && currentHumidityForApparent !== null && currentWindSpeedForApparent !== null)
+    ? calculateApparentTemperature(currentTemp, currentHumidityForApparent, currentWindSpeedForApparent, currentWindGusts)
     : null;
 
   const currentApparentTemp = (activeStation && typeof stApparentTemp === 'number' && !isNaN(stApparentTemp))
     ? stApparentTemp
     : (calculatedStApparentTemp !== null ? calculatedStApparentTemp : rawCurrentApparentTemp);
+
+  // Wskaźnik porównawczy: różnica temperatury w stosunku do wczoraj o tej samej porze (past_days=1)
+  const yesterdayIndex = currentIdx >= 24 ? currentIdx - 24 : -1;
+  const yesterdayTemp = (yesterdayIndex >= 0 && typeof hourly?.temperature_2m?.[yesterdayIndex] === 'number')
+    ? hourly.temperature_2m[yesterdayIndex]
+    : null;
+  const tempDiffYesterday = (currentTemp !== null && yesterdayTemp !== null)
+    ? Number((currentTemp - yesterdayTemp).toFixed(1))
+    : null;
 
   const getNext24HoursFromIndex = (startIndex: number) => {
     return Array.from({ length: 24 }).map((_, i) => {
@@ -495,7 +573,13 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
       if (idx >= hourly.time.length) return null;
       
       const timeStr = hourly.time[idx];
-      const temp = (i === 0 && currentTemp !== null) ? currentTemp : hourly.temperature_2m[idx];
+      const rawHourTemp = hourly.temperature_2m[idx];
+      // Kalibracja wykresu godzinnego: stała korekta Bias dla całej krzywej
+      const calibratedHourTemp = (typeof rawHourTemp === 'number' && !isNaN(rawHourTemp))
+        ? (calibrationDetails.isCalibrated ? Number((rawHourTemp + tempBias).toFixed(1)) : rawHourTemp)
+        : null;
+
+      const temp = (i === 0 && currentTemp !== null) ? currentTemp : (calibratedHourTemp ?? rawHourTemp);
       const code = hourly.weather_code[idx] ?? 0;
       const hourLabel = new Date(timeStr).toLocaleTimeString("pl-PL", {
         hour: "2-digit",
@@ -505,23 +589,31 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
       const pop = (hourly.precipitation_probability && typeof hourly.precipitation_probability[idx] === 'number') 
         ? hourly.precipitation_probability[idx] 
         : 0;
-      let cloudCover = (hourly.cloud_cover && typeof hourly.cloud_cover[idx] === 'number')
+      const rawHourCloud = (hourly.cloud_cover && typeof hourly.cloud_cover[idx] === 'number')
         ? hourly.cloud_cover[idx]
         : 0;
+      const hourLow = typeof hourly.cloud_cover_low?.[idx] === 'number' ? hourly.cloud_cover_low[idx] : null;
+      const hourMid = typeof hourly.cloud_cover_mid?.[idx] === 'number' ? hourly.cloud_cover_mid[idx] : null;
+      const hourHigh = typeof hourly.cloud_cover_high?.[idx] === 'number' ? hourly.cloud_cover_high[idx] : null;
 
       const precip = (hourly.precipitation && typeof hourly.precipitation[idx] === 'number')
         ? hourly.precipitation[idx]
         : 0;
 
-      cloudCover = Math.min(100, Math.max(0, Math.round(cloudCover)));
+      const opticalHourCloud = calculateOpticalCloudCover(hourLow, hourMid, hourHigh, rawHourCloud);
+      const cloudCover = opticalHourCloud;
 
-      const hourMeta = getWeatherMeta(code, isDay);
+      const hourMeta = getWeatherMeta(code, isDay, opticalHourCloud, precip, undefined, undefined, { low: hourLow, mid: hourMid, high: hourHigh, total: rawHourCloud });
       const HourIcon = hourMeta.icon;
+      const hourWind = (hourly.wind_speed_10m && typeof hourly.wind_speed_10m[idx] === 'number') ? hourly.wind_speed_10m[idx] : 0;
+      const hourGust = (hourly.wind_gusts_10m && typeof hourly.wind_gusts_10m[idx] === 'number') ? hourly.wind_gusts_10m[idx] : Math.round(hourWind * 1.3);
+      const hourHum = (hourly.relative_humidity_2m && typeof hourly.relative_humidity_2m[idx] === 'number') ? hourly.relative_humidity_2m[idx] : 50;
+      const hourCalibratedApparent = (typeof temp === 'number') ? calculateApparentTemperature(temp, hourHum, hourWind, hourGust) : null;
       const apparentTemp = (i === 0 && currentApparentTemp !== null)
         ? currentApparentTemp
-        : ((hourly.apparent_temperature && typeof hourly.apparent_temperature[idx] === 'number') 
-            ? hourly.apparent_temperature[idx] 
-            : null);
+        : (hourCalibratedApparent ?? ((hourly.apparent_temperature && typeof hourly.apparent_temperature[idx] === 'number') 
+            ? (calibrationDetails.isCalibrated ? Number((hourly.apparent_temperature[idx] + tempBias).toFixed(1)) : hourly.apparent_temperature[idx])
+            : null));
       const windSpeed = (hourly.wind_speed_10m && typeof hourly.wind_speed_10m[idx] === 'number')
         ? Math.round(hourly.wind_speed_10m[idx])
         : null;
@@ -582,9 +674,60 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     ? phoneBarometer
     : stPressure;
 
+  const discomfortIndex = (currentTemp !== null && currentHumidity !== null)
+    ? Number((currentTemp - 0.55 * (1 - 0.01 * currentHumidity) * (currentTemp - 14.4)).toFixed(1))
+    : null;
+
+  const calculateLuxCloudCover = (lux: number, isDaytime: boolean, loc: "indoor" | "outdoor") => {
+    if (!isDaytime) return null;
+
+    let cloudCover: number;
+    let label: string;
+    let icon: string;
+
+    if (loc === "indoor") {
+      const effectiveLux = lux * 2.5;
+      const factor = Math.min(1, Math.max(0, (effectiveLux - 200) / (7500 - 200)));
+      cloudCover = Math.round((1 - factor) * 100);
+    } else {
+      const factor = Math.min(1, Math.max(0, (lux - 300) / (32000 - 300)));
+      cloudCover = Math.round((1 - factor) * 100);
+    }
+
+    if (cloudCover <= 10) {
+      label = loc === "indoor" ? "Bezchmurnie (Fotometr za szybą)" : "Pełne słońce w plenerze";
+      icon = "☀️";
+    } else if (cloudCover <= 40) {
+      label = loc === "indoor" ? "Przejaśnienia za szybą" : "Jasno i słonecznie (Fotometr)";
+      icon = "⛅";
+    } else if (cloudCover <= 70) {
+      label = loc === "indoor" ? "Umiarkowane zachmurzenie za szybą" : "Gęste chmury (Fotometr)";
+      icon = "⛅";
+    } else {
+      label = loc === "indoor" ? "Pochmurno / Cień za szybą" : "Ciemne chmury (Fotometr)";
+      icon = "☁️";
+    }
+
+    return { cloudCover, label, icon };
+  };
+
+
+  const lowCloud = typeof hourly.cloud_cover_low?.[currentIdx] === 'number'
+    ? hourly.cloud_cover_low[currentIdx]
+    : (typeof current?.cloud_cover_low === 'number' ? current.cloud_cover_low : 0);
+  const midCloud = typeof hourly.cloud_cover_mid?.[currentIdx] === 'number'
+    ? hourly.cloud_cover_mid[currentIdx]
+    : (typeof current?.cloud_cover_mid === 'number' ? current.cloud_cover_mid : 0);
+  const highCloud = typeof hourly.cloud_cover_high?.[currentIdx] === 'number'
+    ? hourly.cloud_cover_high[currentIdx]
+    : (typeof current?.cloud_cover_high === 'number' ? current.cloud_cover_high : 0);
+
+  const opticalCloudCover = calculateOpticalCloudCover(lowCloud, midCloud, highCloud, currentCloudCover);
+  const opticalCloudLabel = getOpticalCloudDescription(opticalCloudCover);
+
   let wyswietlaneZachmurzenie = manualCloudCover !== null 
     ? manualCloudCover 
-    : currentCloudCover;
+    : opticalCloudCover;
 
   const calibratedNext24Hours = useMemo(() => {
     return next24Hours.map((hour, idx) => {
@@ -640,6 +783,34 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     }
   }, [hourly, daily, currentTemp]);
 
+  const upcomingNightTemp = useMemo(() => {
+    try {
+      if (hourly && Array.isArray(hourly.time) && Array.isArray(hourly.temperature_2m)) {
+        const now = new Date();
+        const currentIsoHour = now.toISOString().slice(0, 13);
+        const curIdx = hourly.time.findIndex((t: string) => t.startsWith(currentIsoHour));
+        const startIdx = curIdx !== -1 ? curIdx : 0;
+        
+        const nightTemps: number[] = [];
+        for (let i = startIdx; i < Math.min(hourly.time.length, startIdx + 24); i++) {
+          const timeStr = hourly.time[i];
+          const hourVal = parseInt(timeStr.slice(11, 13), 10);
+          if (hourVal >= 22 || hourVal <= 6) {
+            if (typeof hourly.temperature_2m[i] === 'number') {
+              nightTemps.push(hourly.temperature_2m[i]);
+            }
+          }
+        }
+        if (nightTemps.length > 0) {
+          return Math.min(...nightTemps);
+        }
+      }
+      return daily.temperature_2m_min?.[0] ?? currentTemp;
+    } catch (e) {
+      return daily.temperature_2m_min?.[0] ?? currentTemp;
+    }
+  }, [hourly, daily, currentTemp]);
+
   // Early return ONLY after ALL hooks have been unconditionally called
   if (!weatherObj || !current) {
     return (
@@ -671,6 +842,29 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   }
 
   // Find index of the current hour using the specific logic requested by the user
+  const getCloudCoverLabel = (pct: number) => {
+    if (pct < 10) return "Bezchmurnie";
+    if (pct <= 40) return "Przejaśnienia / Lekkie chmury";
+    if (pct < 60) return "Umiarkowane";
+    if (pct < 90) return "Duże";
+    return "Pochmurno";
+  };
+
+  const getWindDirection = (deg: number) => {
+    const directions = ["Północny (N)", "Północno-Wschodni (NE)", "Wschodni (E)", "Południowo-Wschodni (SE)", "Południowy (S)", "Południowo-Zachodni (SW)", "Zachodni (W)", "Północno-Zachodni (NW)"];
+    const index = Math.round(deg / 45) % 8;
+    return directions[index];
+  };
+
+  const getDiscomfortDetails = (di: number | null) => {
+    if (di === null || isNaN(di)) return { label: "Brak danych", color: "text-slate-400", bg: "bg-slate-500/20", border: "border-slate-500/30", barColor: "bg-slate-500", desc: "Brak wystarczających danych do obliczenia wskaźnika." };
+    if (di < 21) return { label: "Komfortowo", color: "text-emerald-400", bg: "bg-emerald-500/20", border: "border-emerald-500/30", barColor: "bg-emerald-500", desc: "Przyjemne warunki termiczne bez odczucia duszności." };
+    if (di < 25) return { label: "Ciepło / Lekki dyskomfort", color: "text-amber-400", bg: "bg-amber-500/20", border: "border-amber-500/30", barColor: "bg-amber-500", desc: "Zauważalne ciepło, warto zadbać o nawodnienie." };
+    if (di < 30) return { label: "Duszno i parno", color: "text-orange-400", bg: "bg-orange-500/20", border: "border-orange-500/30", barColor: "bg-orange-500", desc: "Podwyższona wilgotność i temperatura. Możliwe uczucie duszności." };
+    return { label: "Ekstremalny upał i duszność", color: "text-red-400", bg: "bg-red-500/20", border: "border-red-500/30", barColor: "bg-red-500", desc: "Bardzo wysoki stres termiczny! Unikaj wysiłku na słońcu." };
+  };
+  const discomfortMeta = getDiscomfortDetails(discomfortIndex);
+
   const getWindDirectionText = (deg: number) => {
     const directions = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
     const index = Math.round((deg % 360) / 22.5);
@@ -683,31 +877,54 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const currentWeatherMeta = getWeatherMeta(
     wCode, 
     isDay, 
-    activeCloudCover, 
+    opticalCloudCover, 
     currentPrecipitation, 
     currentShortwaveRadiation, 
-    userWeatherOverrideCode ?? undefined
+    userWeatherOverrideCode ?? undefined,
+    { low: lowCloud, mid: midCloud, high: highCloud, total: currentCloudCover }
   );
 
+  const isPrecipitatingOrStorm = currentPrecipitation > 0.05 || (currentWeatherMeta.code >= 50 && currentWeatherMeta.code <= 99);
   // Removed luxCloudRes usage as requested
   let displayOpis = currentWeatherMeta.text;
+  let displayIkonka = currentWeatherMeta.emoji;
 
   const windDirText = getWindDirectionText(typeof currentWindDirection === 'number' ? currentWindDirection : 0);
-
+  const indoorHumidity = Math.min(99, Math.max(20, Math.round(currentHumidity * 0.95 + 2)));
+  
+  // Realistic cloud ceiling estimate based on weather conditions and layers
+  let cloudCeiling = 1200;
+  if (wyswietlaneZachmurzenie <= 5 || currentCloudCover <= 5 || wCode === 0) {
+    cloudCeiling = 12192; // Unlimited / high troposphere limit matching commercial apps for clear skies
+  } else if (wCode <= 2 && wyswietlaneZachmurzenie < 50) {
+    cloudCeiling = Math.round(1400 + (currentTemp * 30) - (currentHumidity * 5));
+  } else if (lowCloud > 15) {
+    cloudCeiling = Math.round(20 * (100 - currentHumidity) + 300);
+  } else if (midCloud > 15) {
+    cloudCeiling = Math.round(2500 + (100 - currentHumidity) * 20);
+  } else if (highCloud > 10) {
+    cloudCeiling = Math.round(7000 + (currentTemp * 12) - (currentHumidity * 8));
+  } else if (currentCloudCover > 0) {
+    cloudCeiling = Math.max(800, Math.round(35 * (100 - currentHumidity)));
+  }
+  
   // Visibility from API
   const visibilityFromApi = current?.visibility ?? hourly.visibility?.[currentIdx];
   let rawVisKm = visibilityFromApi ? Math.round(visibilityFromApi / 1000) : 20;
   // If no fog (wCode 40-49), no rain, and humidity <= 92%, clear air visibility should be realistic (at least 15-30km)
-  const isFogOrRain = (wCode >= 40 && wCode <= 49) || currentPrecipitation > 0 || (rawCurrentHumidity ?? 0) > 92;
+  const isFogOrRain = (wCode >= 40 && wCode <= 49) || currentPrecipitation > 0 || rawCurrentHumidity > 92;
   if (!isFogOrRain && rawVisKm < 10) {
     rawVisKm = Math.round(18 + (100 - wyswietlaneZachmurzenie) * 0.12);
   }
   const visibilityKm = rawVisKm;
 
   // UV index from meteo source (using current UV without zeroing by is_day)
+  let displayUv = "Brak danych";
   let uvVal = 0;
   if (currentUvIndex !== null && typeof currentUvIndex === 'number') {
     uvVal = Math.max(0, currentUvIndex);
+    const uvOpis = getUvIndexDescription(uvVal);
+    displayUv = `${Math.round(uvVal)} — ${uvOpis}`;
   }
 
   // Recommendations logic
@@ -730,7 +947,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
       color: 'bg-indigo-500/10 border-indigo-500/30'
     });
   }
-  if ((currentPop ?? 0) > 40 || (wCode >= 51 && wCode <= 67)) {
+  if (currentPop > 40 || (wCode >= 51 && wCode <= 67)) {
     recommendations.push({
       id: 'rain',
       type: 'DESZCZ',
@@ -746,13 +963,16 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     try {
       const datePrefix = targetDayStr.slice(0, 10);
       return hourly.time
-        .map((t: string, idx: number) => {
+        .map((t, idx) => {
           const pop = (hourly.precipitation_probability && typeof hourly.precipitation_probability[idx] === 'number') ? hourly.precipitation_probability[idx] : 0;
-          let cloudCover = (hourly.cloud_cover && typeof hourly.cloud_cover[idx] === 'number') ? hourly.cloud_cover[idx] : 0;
+          const rawHourCloud = (hourly.cloud_cover && typeof hourly.cloud_cover[idx] === 'number') ? hourly.cloud_cover[idx] : 0;
+          const hLow = typeof hourly.cloud_cover_low?.[idx] === 'number' ? hourly.cloud_cover_low[idx] : null;
+          const hMid = typeof hourly.cloud_cover_mid?.[idx] === 'number' ? hourly.cloud_cover_mid[idx] : null;
+          const hHigh = typeof hourly.cloud_cover_high?.[idx] === 'number' ? hourly.cloud_cover_high[idx] : null;
           const precip = (hourly.precipitation && typeof hourly.precipitation[idx] === 'number') ? hourly.precipitation[idx] : 0;
           const code = hourly.weather_code[idx] ?? 0;
 
-          cloudCover = Math.min(100, Math.max(0, Math.round(cloudCover)));
+          const cloudCover = calculateOpticalCloudCover(hLow, hMid, hHigh, rawHourCloud);
 
           const apparentTemp = (hourly.apparent_temperature && typeof hourly.apparent_temperature[idx] === 'number')
             ? hourly.apparent_temperature[idx]
@@ -777,11 +997,20 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             precip
           };
         })
-        .filter((item: { timeStr: string }) => item.timeStr.startsWith(datePrefix));
+        .filter(item => item.timeStr.startsWith(datePrefix));
     } catch (e) {
       return [];
     }
   };
+
+  // Calculate 7-day temperature range for relative scale bars
+  const globalMinTemp = Array.isArray(daily?.temperature_2m_min) && daily.temperature_2m_min.length > 0 
+    ? Math.min(...daily.temperature_2m_min.filter((t): t is number => typeof t === 'number'))
+    : 0;
+  const globalMaxTemp = Array.isArray(daily?.temperature_2m_max) && daily.temperature_2m_max.length > 0
+    ? Math.max(...daily.temperature_2m_max.filter((t): t is number => typeof t === 'number'))
+    : 30;
+  const globalTempRange = Math.max(1, (isFinite(globalMaxTemp) ? globalMaxTemp : 30) - (isFinite(globalMinTemp) ? globalMinTemp : 0));
 
   // Dynamic Background & Lighting gradient calculation based on weather code and time of day (day / sunset / night / rain / storm / snow)
   const currentHour = new Date().getHours();
@@ -986,7 +1215,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
           currentLng={userLng || 19.1772}
           onSelectPlace={(lat, lng, name) => {
             if (onLocationSelected) {
-              onLocationSelected(lat, lng, name);
+              onLocationSelected(lat, lng, name, false, true);
             } else {
               onRefresh();
             }
@@ -1043,17 +1272,45 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             </div>
           )}
 
-          {/* Active IMGW Station badge if available */}
-          {selectedStationOverride && (
+          {/* Active IMGW Station badge or Temperature Source Diagnostic badge */}
+          {activeStation ? (
+            <div className="flex flex-wrap items-center justify-center gap-2 mb-3">
+              {calibrationDetails.isDelayed ? (
+                <span className="text-[11px] font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.9)]" />
+                  {calibrationDetails.statusLabel}
+                </span>
+              ) : isUsingImgw ? (
+                <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
+                  Stacja IMGW: <strong className="text-white">{(activeStation as any).stationName || (activeStation as any).name || "Najbliższa stacja"}</strong>
+                  {(activeStation as any).distanceKm !== undefined ? ` (${Math.round((activeStation as any).distanceKm)} km)` : ((activeStation as any).distance ? ` (${(activeStation as any).distance})` : '')}
+                  {calibrationDetails.measurementHourStr ? ` • ${calibrationDetails.measurementHourStr}` : ''}
+                  {calibrationDetails.expectedNextUpdateStr ? ` (kolejny ~${calibrationDetails.expectedNextUpdateStr})` : ''}
+                  <span className="text-emerald-400 font-bold ml-1">• Rzeczywisty pomiar</span>
+                </span>
+              ) : (
+                <span className="text-[10px] font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-3 py-0.5 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  Model Open-Meteo (Best Match)
+                </span>
+              )}
+              {typeof rawCurrentTemp === 'number' && (
+                <span className="text-[10px] text-slate-400 bg-black/30 border border-white/10 px-2.5 py-0.5 rounded-full backdrop-blur-md">
+                  Model Open-Meteo: {rawCurrentTemp.toFixed(1).replace('.', ',')}°C
+                </span>
+              )}
+            </div>
+          ) : (
             <div className="flex items-center justify-center mb-3">
-              <span className="text-[11px] font-semibold text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-3 py-0.5 rounded-full flex items-center gap-1.5 backdrop-blur-md">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
-                IMGW: {selectedStationOverride.name} ({selectedStationOverride.distance})
+              <span className="text-[10px] font-medium text-cyan-300 bg-cyan-500/10 border border-cyan-500/20 px-3 py-0.5 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                Model Open-Meteo (Best Match)
               </span>
             </div>
           )}
 
-          {/* 3. BIG TEMPERATURE (Hierarchy: Największy element ekranu) */}
+          {/* 3. BIG TEMPERATURE & HIERARCHY */}
           <div className="flex flex-col items-center justify-center my-3 sm:my-5">
             <div className="flex items-start justify-center">
               <span className="text-8xl sm:text-9xl md:text-[10.5rem] font-black tracking-tighter text-white leading-none drop-shadow-[0_10px_20px_rgba(0,0,0,0.4)] select-none">
@@ -1061,14 +1318,60 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               </span>
               <span className="text-5xl sm:text-6xl md:text-7xl font-extralight text-cyan-200/90 mt-2 ml-1 select-none">°</span>
             </div>
-            
-            {/* Wyraźna, nowoczesna temperatura odczuwalna */}
-            <div className="mt-3 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.08] border border-white/15 backdrop-blur-md shadow-lg">
+
+            {/* Temperatura odczuwalna tuż pod głównym wynikiem °C */}
+            <div className="mt-2.5 inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white/[0.08] border border-white/15 backdrop-blur-md shadow-lg">
               <Thermometer className="w-4 h-4 text-amber-300" />
               <span className="text-sm sm:text-base font-medium text-slate-200">
                 Temperatura odczuwalna: <strong className="text-white font-black ml-1">{currentApparentTemp !== null && !isNaN(currentApparentTemp) ? `${currentApparentTemp.toFixed(1).replace('.', ',')}°C` : 'Brak danych'}</strong>
               </span>
             </div>
+
+            {/* Wskaźnik porównawczy: O X°C cieplej/chłodniej niż wczoraj */}
+            {tempDiffYesterday !== null && (
+              <div className="mt-2 flex items-center justify-center">
+                {tempDiffYesterday > 0.2 ? (
+                  <span className="text-[11px] sm:text-xs font-semibold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                    <TrendingUp className="w-3.5 h-3.5 text-amber-400" />
+                    O <strong className="text-white font-bold">{tempDiffYesterday.toFixed(1).replace('.', ',')}°C</strong> cieplej niż wczoraj
+                  </span>
+                ) : tempDiffYesterday < -0.2 ? (
+                  <span className="text-[11px] sm:text-xs font-semibold text-cyan-300 bg-cyan-500/15 border border-cyan-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                    <TrendingDown className="w-3.5 h-3.5 text-cyan-400" />
+                    O <strong className="text-white font-bold">{Math.abs(tempDiffYesterday).toFixed(1).replace('.', ',')}°C</strong> chłodniej niż wczoraj
+                  </span>
+                ) : (
+                  <span className="text-[11px] sm:text-xs font-medium text-slate-300 bg-white/10 border border-white/15 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                    Temperatura taka sama jak wczoraj o tej porze (±0,2°C)
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* Podpis dynamicznej kalibracji danych (Bias Correction / IMGW) */}
+            {calibrationDetails.isDelayed ? (
+              <div className="mt-2 flex items-center justify-center">
+                <span className="text-[11px] sm:text-xs font-medium text-amber-300 bg-amber-500/15 border border-amber-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+                  {calibrationDetails.statusLabel} • Aktywny profil na żywo z Open-Meteo
+                </span>
+              </div>
+            ) : calibrationDetails.isCalibrated ? (
+              <div className="mt-2 flex items-center justify-center">
+                <span className="text-[11px] sm:text-xs font-medium text-emerald-300 bg-emerald-500/15 border border-emerald-500/30 px-3 py-1 rounded-full flex items-center gap-1.5 backdrop-blur-md shadow-sm">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  {calibrationDetails.statusLabel}
+                  {Math.abs(calibrationDetails.bias) > 0 ? ` (korekta ${calibrationDetails.bias > 0 ? '+' : ''}${calibrationDetails.bias.toFixed(1)}°C)` : ''}
+                </span>
+              </div>
+            ) : (
+              <div className="mt-2 flex items-center justify-center">
+                <span className="text-[11px] font-medium text-cyan-300/90 bg-cyan-500/10 border border-cyan-500/20 px-3 py-0.5 rounded-full flex items-center gap-1.5 backdrop-blur-md">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400" />
+                  Model numeryczny Open-Meteo
+                </span>
+              </div>
+            )}
 
             {/* Wiatr i porywy w głównej karcie */}
             <div className="mt-3 flex items-center justify-center">
@@ -1173,6 +1476,23 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
         </motion.div>
 
         {/* ========================================================================= */}
+        {/* NOWY MODUŁ: Życiowy Asystent Pogodowy (Smart Weather Assistant)           */}
+        {/* ========================================================================= */}
+        <div className="max-w-4xl mx-auto mb-6">
+          <SmartWeatherAssistantCard 
+            data={data}
+            currentTemp={currentTemp}
+            currentApparentTemp={currentApparentTemp}
+            currentWindSpeed={currentWindSpeed}
+            currentWindGusts={currentWindGusts}
+            currentPrecipitation={currentPrecipitation}
+            currentCloudCover={currentCloudCover}
+            currentShortwaveRadiation={currentShortwaveRadiation}
+            isDay={isDay}
+          />
+        </div>
+
+        {/* ========================================================================= */}
         {/* 4. KAFELKI PARAMETRÓW (Wilgotność, Wiatr, Opady, Zachmurzenie, Ciśnienie, UV) */}
         {/* ========================================================================= */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 sm:gap-3.5 max-w-4xl mx-auto mb-6">
@@ -1187,7 +1507,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
               {currentHumidity !== null ? `${currentHumidity}%` : '—'}
             </span>
-            <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-1">
+            <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-1 drop-shadow-sm">
               Wilgotność
             </span>
           </motion.div>
@@ -1204,7 +1524,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
                 {currentWindSpeed !== null ? `${currentWindSpeed} km/h` : '—'}
               </span>
-              <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-0.5">
+              <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-0.5 drop-shadow-sm">
                 Wiatr
               </span>
             </div>
@@ -1214,7 +1534,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <div className="px-2 py-0.5 rounded-lg bg-teal-500/20 border border-teal-500/30 text-[10px] text-teal-200 font-bold w-full truncate">
                 Porywy: <strong className="text-white font-bold">{currentWindGusts !== null ? `${currentWindGusts} km/h` : (currentWindSpeed !== null ? `${Math.round(currentWindSpeed * 1.3)} km/h` : '—')}</strong>
               </div>
-              <span className="text-[10px] text-slate-400 font-medium mt-1">
+              <span className="text-[10px] text-slate-300 font-medium mt-1">
                 {windDirText} • {currentWindDirection}°
               </span>
             </div>
@@ -1231,25 +1551,42 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
               {currentPrecipitation !== null ? `${currentPrecipitation} mm` : '0 mm'}
             </span>
-            <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-1">
+            <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-1 drop-shadow-sm">
               Opady
             </span>
           </motion.div>
 
-          {/* Zachmurzenie */}
+          {/* Zachmurzenie (Optyczne OptiCloud & Modelowe) */}
           <motion.div 
             whileHover={{ y: -3 }}
-            className="p-4 bg-gradient-to-b from-white/[0.09] to-white/[0.03] border border-white/12 hover:border-indigo-400/30 rounded-3xl flex flex-col items-center text-center shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.15)] backdrop-blur-2xl transition-all"
+            onClick={() => setIsCloudModalOpen(true)}
+            className="p-3.5 sm:p-4 bg-gradient-to-b from-white/[0.09] to-white/[0.03] border border-white/12 hover:border-indigo-400/40 rounded-3xl flex flex-col items-center text-center shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4),inset_0_1px_0_rgba(255,255,255,0.15)] backdrop-blur-2xl transition-all justify-between cursor-pointer group"
+            title={`Zachmurzenie optyczne (OptiCloud): ${opticalCloudCover}% (${opticalCloudLabel})\nPokrycie modelowe: ${currentCloudCover}%\nWarstwy:\nNiskie: ${lowCloud}%\nŚrednie: ${midCloud}%\nWysokie: ${highCloud}%\n\nOptiCloud – autorski wskaźnik Aury uwzględniający wpływ poszczególnych warstw chmur na odbiór zachmurzenia przez obserwatora.\n\nKliknij, aby otworzyć szczegóły warstw.`}
           >
-            <div className="p-2.5 rounded-2xl bg-indigo-500/15 border border-indigo-400/20 mb-2 shadow-inner">
-              <Cloud className="w-5 h-5 text-indigo-400 drop-shadow" />
+            <div className="flex flex-col items-center w-full">
+              <div className="p-2.5 rounded-2xl bg-indigo-500/15 border border-indigo-400/20 mb-1.5 shadow-inner group-hover:scale-105 transition-transform">
+                <Cloud className="w-5 h-5 text-indigo-400 drop-shadow" />
+              </div>
+              <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
+                {opticalCloudCover !== null ? `${opticalCloudCover}%` : '—'}
+              </span>
+              <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-0.5 drop-shadow-sm">
+                Zachmurzenie
+              </span>
+              <span className="text-[9.5px] text-indigo-300 font-semibold">
+                optyczne (OptiCloud)
+              </span>
             </div>
-            <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              {wyswietlaneZachmurzenie !== null ? `${wyswietlaneZachmurzenie}%` : '—'}
-            </span>
-            <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-1">
-              Zachmurzenie
-            </span>
+
+            {/* Wskaźnik Optyczny & Model */}
+            <div className="mt-2 w-full pt-2 border-t border-white/10 flex flex-col items-center">
+              <div className="px-2 py-0.5 rounded-lg bg-indigo-500/20 border border-indigo-500/30 text-[10px] text-indigo-200 font-bold w-full truncate flex items-center justify-center gap-1">
+                <span className="text-white font-bold truncate">{opticalCloudLabel}</span>
+              </div>
+              <span className="text-[9px] text-slate-300 font-medium truncate w-full mt-1">
+                Model: <strong className="text-slate-200">{currentCloudCover}%</strong> (szczegóły ↗)
+              </span>
+            </div>
           </motion.div>
 
           {/* Ciśnienie */}
@@ -1263,7 +1600,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
               {currentPressure !== null ? `${currentPressure} hPa` : '—'}
             </span>
-            <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-1">
+            <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-1 drop-shadow-sm">
               Ciśnienie
             </span>
           </motion.div>
@@ -1277,10 +1614,13 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <Sun className="w-5 h-5 text-amber-400 drop-shadow" />
             </div>
             <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              {uvVal !== null && !isNaN(uvVal) ? uvVal.toFixed(1) : '—'}
+              {uvVal !== null && !isNaN(uvVal) ? Math.round(uvVal) : '—'}
             </span>
-            <span className="text-[11px] text-slate-300 font-semibold uppercase tracking-wider mt-1">
+            <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-1 drop-shadow-sm">
               Indeks UV
+            </span>
+            <span className="text-[10px] text-amber-300 font-semibold mt-0.5 tracking-tight">
+              {uvVal !== null && !isNaN(uvVal) ? getUvIndexDescription(uvVal) : '—'}
             </span>
           </motion.div>
         </div>
@@ -1335,7 +1675,9 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase">Indeks UV</span>
                 <strong className="text-white text-sm font-bold">
-                  {todayMaxUv !== null && !isNaN(todayMaxUv) ? todayMaxUv.toFixed(1) : (uvVal !== null && !isNaN(uvVal) ? uvVal.toFixed(1) : '—')}
+                  {todayMaxUv !== null && !isNaN(todayMaxUv) 
+                    ? `${Math.round(todayMaxUv)} (${getUvIndexDescription(todayMaxUv)})` 
+                    : (uvVal !== null && !isNaN(uvVal) ? `${Math.round(uvVal)} (${getUvIndexDescription(uvVal)})` : '—')}
                 </strong>
               </div>
             </div>
@@ -1606,7 +1948,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               </button>
             </div>
             <div className="space-y-3">
-              {daily.time.slice(0, 3).map((day: string, idx: number) => {
+              {daily.time.slice(0, 3).map((day, idx) => {
                 const dayName = idx === 0 ? "Dziś" : idx === 1 ? "Jutro" : new Date(day).toLocaleDateString("pl-PL", { weekday: "long" }).replace(/^\w/, (c) => c.toUpperCase());
                 const dayWCode = daily.weather_code?.[idx] ?? 0;
                 const dMeta = getWeatherMeta(dayWCode, true);
@@ -1659,7 +2001,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
                     {isExpanded && (
                       <div className="mt-2.5 overflow-x-auto no-scrollbar pb-2 touch-pan-x" style={{ willChange: 'scroll-position' }}>
                         <div className="flex space-x-2.5 p-1">
-                          {getHourlyForDay(day).map((h: any, hIdx: number) => (
+                          {getHourlyForDay(day).map((h, hIdx) => (
                             <div key={hIdx} className="min-w-[80px] flex flex-col items-center p-3 bg-white/[0.05] border border-white/10 rounded-2xl text-center backdrop-blur-xl shadow-md">
                               <span className="text-[10px] text-slate-300 font-bold mb-1">{h.hourLabel}</span>
                               <AiWeatherIcon 
@@ -1940,6 +2282,17 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
           isLuxClamped,
           fusionMetadata: current?.fusion_metadata
         }}
+      />
+
+      <CloudLayersModal
+        isOpen={isCloudModalOpen}
+        onClose={() => setIsCloudModalOpen(false)}
+        modelCloudCover={currentCloudCover}
+        opticalCloudCover={opticalCloudCover}
+        opticalDescription={opticalCloudLabel}
+        lowCloud={lowCloud}
+        midCloud={midCloud}
+        highCloud={highCloud}
       />
 
       <WeatherAlertsToast data={data} />

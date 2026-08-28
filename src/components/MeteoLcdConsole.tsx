@@ -1,39 +1,49 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { 
   Home, 
   Trees, 
   Sun, 
+  Cloud, 
   CloudRain, 
+  Wind, 
+  Compass, 
   Gauge, 
+  Droplets, 
   Wifi, 
   BatteryCharging, 
   Clock, 
   Calendar, 
   Maximize2, 
   Minimize2, 
+  Sparkles, 
   ArrowUp, 
   ArrowDown, 
+  ArrowRight,
   Smile,
   Meh,
   Frown,
+  Activity,
+  Zap,
+  CheckCircle2,
   Tv
 } from "lucide-react";
+import { motion, AnimatePresence } from "motion/react";
 import { WeatherResponse } from "../types";
 import { getWindDirection } from "../utils/weatherUtils";
 
 interface MeteoLcdConsoleProps {
   data: WeatherResponse;
   onClose?: () => void;
-  fusedWindSpeed?: number | null;
-  fusedTemp?: number | null;
-  fusedApparentTemp?: number | null;
-  fusedHumidity?: number | null;
-  fusedPressure?: number | null;
-  fusedWindGusts?: number | null;
-  fusedWindDirection?: number | null;
-  fusedUvIndex?: number | null;
-  fusedPrecipitation?: number | null;
+  fusedWindSpeed?: number;
+  fusedTemp?: number;
+  fusedApparentTemp?: number;
+  fusedHumidity?: number;
+  fusedPressure?: number;
+  fusedWindGusts?: number;
+  fusedWindDirection?: number;
+  fusedUvIndex?: number;
+  fusedPrecipitation?: number;
 }
 
 type LcdTheme = "classic" | "amber" | "cyber" | "matrix";
@@ -85,16 +95,16 @@ export default function MeteoLcdConsole({
     : 0;
 
   // Primary outdoor metrics - strictly synced with parent fused values
-  const outdoorTemp = fusedTemp != null ? fusedTemp : (hourly.temperature_2m?.[currentIdx] ?? current?.temperature_2m ?? null);
-  const outdoorHumidity = fusedHumidity != null ? fusedHumidity : (hourly.relative_humidity_2m?.[currentIdx] ?? current?.relative_humidity_2m ?? null);
-  const feelsLike = fusedApparentTemp != null ? fusedApparentTemp : (hourly.apparent_temperature?.[currentIdx] ?? current?.apparent_temperature ?? null);
-  const pressure = fusedPressure != null && fusedPressure > 800 ? fusedPressure : (hourly.pressure_msl?.[currentIdx] ?? current?.pressure_msl ?? null);
-  const windSpeed = fusedWindSpeed != null ? Math.round(fusedWindSpeed) : (hourly.wind_speed_10m?.[currentIdx] != null ? Math.round(hourly.wind_speed_10m[currentIdx]) : (current?.wind_speed_10m != null ? Math.round(current.wind_speed_10m) : null));
-  const windGust = fusedWindGusts != null ? Math.round(fusedWindGusts) : (hourly.wind_gusts_10m?.[currentIdx] != null ? Math.round(hourly.wind_gusts_10m[currentIdx]) : (current?.wind_gusts_10m != null ? Math.round(current.wind_gusts_10m) : null));
-  const windDirDeg = fusedWindDirection != null ? Math.round(fusedWindDirection) : Math.round(hourly.wind_direction_10m?.[currentIdx] ?? current?.wind_direction_10m ?? 0);
+  const outdoorTemp = fusedTemp !== undefined ? fusedTemp : (hourly.temperature_2m?.[currentIdx] ?? current?.temperature_2m ?? null);
+  const outdoorHumidity = fusedHumidity !== undefined ? fusedHumidity : (hourly.relative_humidity_2m?.[currentIdx] ?? current?.relative_humidity_2m ?? null);
+  const feelsLike = fusedApparentTemp !== undefined ? fusedApparentTemp : (hourly.apparent_temperature?.[currentIdx] ?? current?.apparent_temperature ?? null);
+  const pressure = fusedPressure !== undefined && fusedPressure > 800 ? fusedPressure : (hourly.pressure_msl?.[currentIdx] ?? current?.pressure_msl ?? null);
+  const windSpeed = fusedWindSpeed !== undefined ? Math.round(fusedWindSpeed) : (hourly.wind_speed_10m?.[currentIdx] !== undefined ? Math.round(hourly.wind_speed_10m[currentIdx]) : (current?.wind_speed_10m !== undefined ? Math.round(current.wind_speed_10m) : null));
+  const windGust = fusedWindGusts !== undefined ? Math.round(fusedWindGusts) : (hourly.wind_gusts_10m?.[currentIdx] !== undefined ? Math.round(hourly.wind_gusts_10m[currentIdx]) : (current?.wind_gusts_10m !== undefined ? Math.round(current.wind_gusts_10m) : null));
+  const windDirDeg = fusedWindDirection !== undefined ? Math.round(fusedWindDirection) : Math.round(hourly.wind_direction_10m?.[currentIdx] ?? current?.wind_direction_10m ?? 0);
   const windDirLabel = getWindDirection(windDirDeg);
-  const uvVal = fusedUvIndex != null ? fusedUvIndex : (hourly.uv_index?.[currentIdx] ?? current?.uv_index ?? null);
-  const rainRate = fusedPrecipitation != null ? fusedPrecipitation : (hourly.precipitation?.[currentIdx] ?? current?.precipitation ?? 0);
+  const uvVal = fusedUvIndex !== undefined ? fusedUvIndex : (hourly.uv_index?.[currentIdx] ?? current?.uv_index ?? null);
+  const rainRate = fusedPrecipitation !== undefined ? fusedPrecipitation : (hourly.precipitation?.[currentIdx] ?? current?.precipitation ?? 0);
   const dailyRain = daily?.precipitation_sum?.[0] ?? 0;
 
   // Solar radiation and Klux light intensity (strictly 0 at night)
@@ -133,7 +143,7 @@ export default function MeteoLcdConsole({
     if (speed < 49) return "STRONG";
     return "STORM";
   };
-  const windClass = getWindClass(windSpeed ?? 0);
+  const windClass = getWindClass(windSpeed);
 
   // Days of week polish names
   const daysPl = ["ND", "PON", "WT", "ŚR", "CZW", "PT", "SOB"];
@@ -363,7 +373,7 @@ export default function MeteoLcdConsole({
                   <div>
                     <span className="text-[9px] text-slate-400 block">INDEKS UV</span>
                     <div className="flex items-baseline space-x-1">
-                      <span className={`text-xl font-black ${uvVal > 7 ? "text-purple-400" : uvVal > 5 ? "text-rose-400" : "text-emerald-400"}`}>{uvVal.toFixed(1)}</span>
+                      <span className={`text-xl font-black ${uvVal > 7 ? "text-purple-400" : uvVal > 5 ? "text-rose-400" : "text-emerald-400"}`}>{Math.round(uvVal)}</span>
                       <span className="text-[10px] font-bold text-slate-400">UV</span>
                     </div>
                   </div>
@@ -439,10 +449,10 @@ export default function MeteoLcdConsole({
                     <span className={windClass === "STORM" ? "text-rose-400 font-extrabold" : ""}>WICHER</span>
                   </div>
                   <div className="h-1.5 w-full bg-slate-950 rounded-full overflow-hidden flex">
-                    <div className={`h-full flex-1 ${(windSpeed ?? 0) >= 1 ? "bg-cyan-400" : "bg-slate-800"}`} />
-                    <div className={`h-full flex-1 ${(windSpeed ?? 0) >= 12 ? "bg-emerald-400" : "bg-slate-800"}`} />
-                    <div className={`h-full flex-1 ${(windSpeed ?? 0) >= 29 ? "bg-amber-400" : "bg-slate-800"}`} />
-                    <div className={`h-full flex-1 ${(windSpeed ?? 0) >= 49 ? "bg-rose-500 animate-pulse" : "bg-slate-800"}`} />
+                    <div className={`h-full flex-1 ${windSpeed >= 1 ? "bg-cyan-400" : "bg-slate-800"}`} />
+                    <div className={`h-full flex-1 ${windSpeed >= 12 ? "bg-emerald-400" : "bg-slate-800"}`} />
+                    <div className={`h-full flex-1 ${windSpeed >= 29 ? "bg-amber-400" : "bg-slate-800"}`} />
+                    <div className={`h-full flex-1 ${windSpeed >= 49 ? "bg-rose-500 animate-pulse" : "bg-slate-800"}`} />
                   </div>
                 </div>
 

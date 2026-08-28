@@ -1,3 +1,4 @@
+import React from "react";
 import { CloudRain, AlertTriangle, CheckCircle2, Clock, Droplets } from "lucide-react";
 import { HourlyForecast } from "../types";
 

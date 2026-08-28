@@ -5,13 +5,10 @@ import {
   Pause, 
   SkipBack, 
   SkipForward, 
-  ZoomIn, 
-  ZoomOut, 
   Zap, 
   CloudRain, 
   RefreshCw, 
-  AlertTriangle, 
-  Navigation 
+  AlertTriangle 
 } from "lucide-react";
 import { CurrentWeather, HourlyForecast, DailyForecast } from "../types";
 import { checkStormStatus } from "../utils/weatherUtils";
@@ -130,17 +127,32 @@ export default React.memo(function StormRadar({
     try {
       const map = L.map(container, {
         center: [lat, lng],
-        zoom: 8,
-        minZoom: 4,
-        maxZoom: 15,
+        zoom: 9,
+        minZoom: 9,
+        maxZoom: 9,
         zoomControl: false,
-        attributionControl: false
+        attributionControl: false,
+        dragging: false,
+        touchZoom: false,
+        doubleClickZoom: false,
+        scrollWheelZoom: false,
+        boxZoom: false,
+        keyboard: false
       });
 
-      // Dark Basemap Tiles (CartoDB Dark Matter with HTTPS)
+      // Disable any remaining interactive controls
+      if (map.dragging) map.dragging.disable();
+      if (map.touchZoom) map.touchZoom.disable();
+      if (map.doubleClickZoom) map.doubleClickZoom.disable();
+      if (map.scrollWheelZoom) map.scrollWheelZoom.disable();
+      if (map.boxZoom) map.boxZoom.disable();
+      if (map.keyboard) map.keyboard.disable();
+
+      // Clean Dark Matter Basemap with legible city names & roads
       L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
         maxZoom: 18,
         subdomains: "abcd",
+        opacity: 0.95
       }).addTo(map);
 
       // Layer group for location markers & range circles
@@ -203,36 +215,59 @@ export default React.memo(function StormRadar({
 
     group.clearLayers();
 
-    // 25km & 50km Radar Range Rings
+    // 25km & 50km Radar Range Rings with subtle cyan styling
     const ring25 = L.circle([lat, lng], {
       radius: 25000,
-      color: "#38bdf8",
-      weight: 1,
+      color: "#06b6d4",
+      weight: 1.5,
       dashArray: "4, 6",
-      fill: false,
-      opacity: 0.35
+      fill: true,
+      fillColor: "#06b6d4",
+      fillOpacity: 0.02,
+      opacity: 0.4
     });
 
     const ring50 = L.circle([lat, lng], {
       radius: 50000,
-      color: "#38bdf8",
-      weight: 1,
-      dashArray: "2, 8",
+      color: "#0284c7",
+      weight: 1.2,
+      dashArray: "3, 8",
       fill: false,
-      opacity: 0.2
+      opacity: 0.3
     });
 
     group.addLayer(ring25);
     group.addLayer(ring50);
 
-    // Center Location Marker (Pulsating Dot)
+    // Subtle distance labels on range rings (north of center)
+    const dist25Marker = L.marker([lat + 0.225, lng], {
+      icon: L.divIcon({
+        html: `<span class="px-1.5 py-0.5 rounded bg-slate-950/80 text-[9px] font-mono font-semibold text-cyan-300 border border-cyan-500/30">25 km</span>`,
+        className: "dist-label",
+        iconSize: [40, 16],
+        iconAnchor: [20, 8]
+      })
+    });
+    const dist50Marker = L.marker([lat + 0.45, lng], {
+      icon: L.divIcon({
+        html: `<span class="px-1.5 py-0.5 rounded bg-slate-950/80 text-[9px] font-mono font-semibold text-sky-400 border border-sky-500/30">50 km</span>`,
+        className: "dist-label",
+        iconSize: [40, 16],
+        iconAnchor: [20, 8]
+      })
+    });
+    group.addLayer(dist25Marker);
+    group.addLayer(dist50Marker);
+
+    // Center Location Marker (Clean glowing dot with label)
     const isStormActive = Boolean(stormInfo.isStorm);
     const centerHtml = `
       <div class="relative flex items-center justify-center">
-        <span class="animate-ping absolute inline-flex h-8 w-8 rounded-full ${isStormActive ? 'bg-red-500' : 'bg-cyan-400'} opacity-75"></span>
-        <span class="relative inline-flex rounded-full h-4 w-4 ${isStormActive ? 'bg-red-600 border-2 border-white' : 'bg-cyan-400 border-2 border-slate-900'}"></span>
-        <div class="absolute top-5 whitespace-nowrap bg-slate-950/90 text-white font-extrabold text-[10px] px-2 py-0.5 rounded-md border border-cyan-500/40 shadow-xl backdrop-blur-md uppercase tracking-wider">
-          🎯 ${city.toUpperCase()}
+        <span class="animate-ping absolute inline-flex h-7 w-7 rounded-full ${isStormActive ? 'bg-rose-500' : 'bg-cyan-400'} opacity-60"></span>
+        <span class="relative inline-flex rounded-full h-3.5 w-3.5 ${isStormActive ? 'bg-rose-500 ring-4 ring-rose-500/30' : 'bg-cyan-400 ring-4 ring-cyan-400/30'}"></span>
+        <div class="absolute top-4.5 whitespace-nowrap bg-slate-950/95 text-white font-bold text-[10px] px-2.5 py-1 rounded-lg border border-cyan-400/40 shadow-xl backdrop-blur-md flex items-center gap-1">
+          <span class="w-1.5 h-1.5 rounded-full ${isStormActive ? 'bg-rose-400 animate-pulse' : 'bg-cyan-400'}"></span>
+          <span>${city}</span>
         </div>
       </div>
     `;
@@ -246,58 +281,24 @@ export default React.memo(function StormRadar({
 
     group.addLayer(L.marker([lat, lng], { icon: centerIcon }));
 
-    // Nearby towns reference markers (with clean Polish diacritics)
-    const localTowns = [
-      { name: "Kikół", dLat: 0.12, dLng: -0.08 },
-      { name: "Skępe", dLat: -0.02, dLng: 0.18 },
-      { name: "Karnkowo", dLat: 0.08, dLng: 0.12 },
-      { name: "Bobrowniki", dLat: -0.12, dLng: -0.15 },
-      { name: "Radomice", dLat: -0.09, dLng: 0.06 },
-      { name: "Włocławek", dLat: -0.19, dLng: -0.11 },
-      { name: "Rypin", dLat: 0.22, dLng: 0.24 },
-      { name: "Toruń", dLat: 0.18, dLng: -0.42 }
-    ];
-
-    localTowns.forEach(t => {
-      const townLat = lat + t.dLat;
-      const townLng = lng + t.dLng;
-
-      const townHtml = `
-        <div class="flex items-center space-x-1 bg-slate-900/80 px-1.5 py-0.5 rounded border border-white/10 text-[9px] font-bold text-slate-300 backdrop-blur-sm whitespace-nowrap shadow">
-          <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-          <span>${t.name}</span>
-        </div>
-      `;
-
-      const townIcon = L.divIcon({
-        html: townHtml,
-        className: "custom-town-marker",
-        iconSize: [80, 20],
-        iconAnchor: [40, 10]
-      });
-
-      group.addLayer(L.marker([townLat, townLng], { icon: townIcon }));
-    });
-
     // If active storm, render storm cell lightning warning markers nearby
     if (stormInfo.isStorm || stormInfo.isStormRisk) {
       const stormOffsets = [
-        { dLat: 0.05, dLng: 0.04 },
-        { dLat: -0.04, dLng: 0.08 },
-        { dLat: 0.02, dLng: -0.06 }
+        { dLat: 0.08, dLng: 0.07 },
+        { dLat: -0.06, dLng: 0.12 }
       ];
 
       stormOffsets.forEach((so) => {
         const sHtml = `
-          <div class="animate-bounce flex items-center justify-center p-1 bg-amber-500/90 text-slate-950 rounded-full border-2 border-white shadow-lg shadow-amber-500/50">
-            <svg class="w-4 h-4 fill-current text-slate-950 animate-pulse" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          <div class="animate-pulse flex items-center justify-center p-1.5 bg-amber-500 text-slate-950 rounded-full border-2 border-white shadow-lg shadow-amber-500/50">
+            <svg class="w-3.5 h-3.5 fill-current text-slate-950" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
           </div>
         `;
         const sIcon = L.divIcon({
           html: sHtml,
           className: "storm-cell-marker",
-          iconSize: [24, 24],
-          iconAnchor: [12, 12]
+          iconSize: [22, 22],
+          iconAnchor: [11, 11]
         });
         group.addLayer(L.marker([lat + so.dLat, lng + so.dLng], { icon: sIcon }));
       });
@@ -357,20 +358,6 @@ export default React.memo(function StormRadar({
   const frameTimeStr = currentFrame
     ? new Date(currentFrame.time * 1000).toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" })
     : "NA ŻYWO";
-
-  const handleZoomIn = () => {
-    if (mapInstanceRef.current) mapInstanceRef.current.zoomIn();
-  };
-
-  const handleZoomOut = () => {
-    if (mapInstanceRef.current) mapInstanceRef.current.zoomOut();
-  };
-
-  const handleCenterOnUser = () => {
-    if (mapInstanceRef.current) {
-      mapInstanceRef.current.setView([lat, lng], 9, { animate: true });
-    }
-  };
 
   return (
     <div 
@@ -433,15 +420,15 @@ export default React.memo(function StormRadar({
       </div>
 
       {/* Main Interactive Leaflet Radar Map */}
-      <div className="relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-[24px] bg-[#020617] border border-white/12 overflow-hidden shadow-2xl group z-10">
+      <div className="relative w-full aspect-[16/10] sm:aspect-[16/9] rounded-[24px] bg-[#020617] border border-white/12 overflow-hidden shadow-2xl group z-10 select-none">
         <div
           ref={mapContainerRef}
-          className="w-full h-full block z-0"
+          className="w-full h-full block z-0 pointer-events-none"
         />
 
         {/* Loading Overlay */}
         {isLoadingApi && frames.length === 0 && (
-          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 text-center">
+          <div className="absolute inset-0 z-30 flex flex-col items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 text-center pointer-events-none">
             <RefreshCw className="w-8 h-8 text-cyan-400 animate-spin mb-3" />
             <p className="text-xs font-bold text-white">Wczytywanie skanu radaru opadowego...</p>
             <p className="text-[10px] text-slate-400 mt-1">Pobieranie klatek z sieci radarów RainViewer</p>
@@ -475,31 +462,6 @@ export default React.memo(function StormRadar({
             <Zap className="w-3.5 h-3.5 fill-current" />
             <span>{stormInfo.isStorm ? "AKTYWNA BURZA Z WYŁADOWANIAMI" : stormInfo.isStormRisk ? "RYZYKO CHMUR BURZOWYCH" : "OBSZAR RADARU POLRAD"}</span>
           </div>
-        </div>
-
-        {/* Map Controls */}
-        <div className="absolute top-4 right-4 flex flex-col gap-2 z-20">
-          <button
-            onClick={handleCenterOnUser}
-            className="p-2.5 bg-slate-950/85 hover:bg-slate-800 border border-cyan-500/40 text-cyan-300 rounded-xl backdrop-blur-md transition-all active:scale-90 shadow-lg cursor-pointer flex items-center justify-center"
-            title="Moja lokalizacja"
-          >
-            <Navigation className="w-4 h-4 text-cyan-400" />
-          </button>
-          <button
-            onClick={handleZoomIn}
-            className="p-2.5 bg-slate-950/80 hover:bg-slate-800 border border-white/12 text-white rounded-xl backdrop-blur-md transition-all active:scale-90 shadow-lg cursor-pointer"
-            title="Przybliż"
-          >
-            <ZoomIn className="w-4 h-4" />
-          </button>
-          <button
-            onClick={handleZoomOut}
-            className="p-2.5 bg-slate-950/80 hover:bg-slate-800 border border-white/12 text-white rounded-xl backdrop-blur-md transition-all active:scale-90 shadow-lg cursor-pointer"
-            title="Oddal"
-          >
-            <ZoomOut className="w-4 h-4" />
-          </button>
         </div>
 
         {/* Time Stamp overlay */}

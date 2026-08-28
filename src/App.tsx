@@ -11,14 +11,17 @@ import { detectUserLocation, isPolandCoordinates, getLastValidLocationOrFallback
 import { GeoDiagnosticInfo } from "./components/PwaDiagnosticModal";
 import { fetchNearestImgwSynop, fetchNearestImgwHydro } from "./utils/imgw";
 import { fetchNearestGiosAirQuality } from "./utils/gios";
+import { calculateLeafWetness, calculateOpticalCloudCover } from "./utils/weatherUtils";
+import { fetchWeatherData, fetchFreshImgwStation } from "./services/weatherApi";
 
 import { WeatherResponse } from "./types";
+import { Capacitor } from '@capacitor/core';
 import { getInstallationId, cachedFetch, CACHE_TTLS, isDeveloperMode } from "./utils/cache";
 import { checkBetaTrialStatus } from "./utils/betaTrial";
 import BetaExpiredScreen from "./components/BetaExpiredScreen";
 
 export default function App() {
-  const [isBetaExpired] = useState<boolean>(() => {
+  const [isBetaExpired, setIsBetaExpired] = useState<boolean>(() => {
     try {
       return checkBetaTrialStatus().isExpired;
     } catch (e) {
@@ -30,10 +33,10 @@ export default function App() {
   const [customCityName, setCustomCityName] = useState<string | null>(null);
   const [weatherData, setWeatherData] = useState<WeatherResponse | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [loadingStatus] = useState<string>("Uruchamianie...");
+  const [loadingStatus, setLoadingStatus] = useState<string>("Uruchamianie...");
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [, setIntroMessage] = useState<string | null>(null);
+  const [introMessage, setIntroMessage] = useState<string | null>(null);
   const [geoDiagnostic, setGeoDiagnostic] = useState<GeoDiagnosticInfo | null>(null);
 
   const isStartingUpRef = useRef(false);
@@ -199,14 +202,14 @@ export default function App() {
     startupSequence();
   }, []);
 
-  // Automated 5-minute weather data refresh when location is selected
+  // Automated 2-minute weather & IMGW telemetry refresh (Polling with cache-buster ?t=${Date.now()})
   useEffect(() => {
     if (!coords) return;
 
     const intervalId = setInterval(() => {
-      console.log("Auto-refreshing weather data (5-minute timer)...");
+      console.log("⏱️ [App] Auto-refreshing weather and IMGW telemetry (2-minute cycle with ?t=${Date.now()})...");
       fetchWeather(coords.lat, coords.lng, customCityName || undefined, true, false);
-    }, 300000); // 300,000 ms = 5 minutes
+    }, 120000); // 120,000 ms = 2 minutes
 
     return () => clearInterval(intervalId);
   }, [coords?.lat, coords?.lng, customCityName]);
@@ -236,105 +239,24 @@ export default function App() {
       
       if (!lat || !lng) return;
       
-      console.log("📡 [App] Fetching forecast from Open-Meteo for coords:", lat, lng);
+      console.log("📡 [App] Fetching weather payload for coords:", lat, lng, isRefresh ? "(fresh bypass)" : "");
       
       const cacheKey = `weather_${lat.toFixed(2)}_${lng.toFixed(2)}`;
-      const cachedRes = await cachedFetch(cacheKey, async () => {
-        const getOmUrl = (mode: 'full' | 'standard' | 'minimal' = 'full') => {
-          const baseUrl = "https://api.open-meteo.com/v1/forecast";
-          
-          let currentParams = "temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m,wind_gusts_10m,wind_direction_10m,pressure_msl";
-          let hourlyParams = "temperature_2m,relative_humidity_2m,weather_code,precipitation_probability,wind_speed_10m,wind_gusts_10m,wind_direction_10m";
-          let dailyParams = "temperature_2m_max,temperature_2m_min,weather_code,wind_speed_10m_max,wind_gusts_10m_max";
-          let extraParams = "";
+      let serverPayload: any = null;
+      let omJson: any = null;
 
-          if (mode === 'full' || mode === 'standard') {
-            currentParams += ",precipitation,rain,showers,snowfall,cloud_cover,uv_index,visibility";
-            hourlyParams += ",apparent_temperature,precipitation,uv_index,cloud_cover";
-            dailyParams += ",sunrise,sunset,uv_index_max,precipitation_sum,precipitation_probability_max";
-          }
-
-          if (mode === 'full') {
-            currentParams += ",cloud_cover_low,cloud_cover_mid,cloud_cover_high,shortwave_radiation,direct_normal_irradiance";
-            hourlyParams += ",pressure_msl,cloud_cover_low,cloud_cover_mid,cloud_cover_high,visibility,shortwave_radiation,soil_moisture_0_to_1cm,soil_moisture_1_to_3cm,soil_temperature_0cm,evapotranspiration";
-            dailyParams += ",apparent_temperature_max,apparent_temperature_min";
-            extraParams += "&minutely_15=precipitation,precipitation_probability,rain,snowfall";
-          }
-          
-          return `${baseUrl}?latitude=${lat}&longitude=${lng}&current=${currentParams}${extraParams}&hourly=${hourlyParams}&daily=${dailyParams}&forecast_days=3&timezone=auto`;
-        };
-
-        // 1. Try backend Express proxy server first with a strict 4.5-second timeout
-        let serverPayload: any = null;
-        try {
-          const proxyController = new AbortController();
-          const proxyTimeoutId = setTimeout(() => proxyController.abort(), 4500);
-          const apiRes = await fetch(`/api/weather?lat=${lat}&lng=${lng}${isRefresh ? '&force=true' : ''}`, {
-            signal: proxyController.signal
-          });
-          clearTimeout(proxyTimeoutId);
-
-          if (apiRes.ok) {
-            const json = await apiRes.json();
-            if (json && (json.current || json.weather)) {
-              serverPayload = json;
-            }
-          }
-        } catch (proxyErr) {
-          console.warn("⚠️ [App] Express proxy /api/weather failed or timed out, falling back to direct client fetch:", proxyErr);
-        }
-
-        let resultJson: any = null;
-        if (serverPayload && serverPayload.weather) {
-          resultJson = serverPayload.weather;
-        } else if (serverPayload && serverPayload.current) {
-          resultJson = serverPayload;
-        } else {
-          let omRes: Response | undefined;
-          let usedUrl = getOmUrl('full');
-          
-          try {
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000);
-            omRes = await fetch(usedUrl, { signal: controller.signal });
-            clearTimeout(timeoutId);
-
-            if (!omRes.ok) {
-              usedUrl = getOmUrl('standard');
-              const c2 = new AbortController();
-              const t2 = setTimeout(() => c2.abort(), 4000);
-              omRes = await fetch(usedUrl, { signal: c2.signal });
-              clearTimeout(t2);
-            }
-
-            if (!omRes.ok) {
-              usedUrl = getOmUrl('minimal');
-              const c3 = new AbortController();
-              const t3 = setTimeout(() => c3.abort(), 4000);
-              omRes = await fetch(usedUrl, { signal: c3.signal });
-              clearTimeout(t3);
-            }
-          } catch (err: any) {
-            try {
-              usedUrl = getOmUrl('minimal');
-              const c4 = new AbortController();
-              const t4 = setTimeout(() => c4.abort(), 4000);
-              omRes = await fetch(usedUrl, { signal: c4.signal });
-              clearTimeout(t4);
-            } catch (retryErr) {
-              // ignore
-            }
-          }
-          
-          if (omRes && omRes.ok) {
-            resultJson = await omRes.json();
-          }
-        }
-        return { serverPayload, omJson: resultJson };
-      }, CACHE_TTLS.CURRENT_WEATHER);
-
-      const serverPayload = cachedRes?.serverPayload;
-      const omJson = cachedRes?.omJson;
+      if (isRefresh || isManual) {
+        // Direct fresh fetch bypassing cache with timestamp
+        const res = await fetchWeatherData({ lat, lng, isRefresh: true, forceFresh: true });
+        serverPayload = res.serverPayload;
+        omJson = res.omJson;
+      } else {
+        const cachedRes = await cachedFetch(cacheKey, async () => {
+          return await fetchWeatherData({ lat, lng, isRefresh: false });
+        }, CACHE_TTLS.CURRENT_WEATHER);
+        serverPayload = cachedRes?.serverPayload;
+        omJson = cachedRes?.omJson;
+      }
 
       if (!omJson) {
         // Check if cached data is available in localStorage
@@ -398,11 +320,20 @@ export default function App() {
         typeof rawPressure === 'number' ? rawPressure : 1013
       );
 
+      // 5. Optical perceived cloud cover calculation
+      const lowC = omJson.current?.cloud_cover_low ?? omJson.hourly?.cloud_cover_low?.[currentHourIdx] ?? 0;
+      const midC = omJson.current?.cloud_cover_mid ?? omJson.hourly?.cloud_cover_mid?.[currentHourIdx] ?? 0;
+      const highC = omJson.current?.cloud_cover_high ?? omJson.hourly?.cloud_cover_high?.[currentHourIdx] ?? 0;
+      const totalC = omJson.current?.cloud_cover ?? omJson.hourly?.cloud_cover?.[currentHourIdx] ?? 0;
+      const calculatedOpticCloud = calculateOpticalCloudCover(lowC, midC, highC, totalC);
+
       if (omJson.current) {
         omJson.current.soil_moisture_satellite = mappedSoilMoisture;
         omJson.current.soil_temperature_10cm = mappedSoilTemp;
         omJson.current.shortwave_radiation = mappedRadiation;
         omJson.current.pressure_msl = mappedPressure;
+        omJson.current.perceived_cloud_cover = calculatedOpticCloud;
+        omJson.current.optical_cloud_cover = calculatedOpticCloud;
       }
 
       // Diagnostics trace snapshot for the 5 key parameters
@@ -465,14 +396,14 @@ export default function App() {
           apiField: `current.temperature_2m / hourly.temperature_2m[${currentHourIdx}]`,
           rawApiValue: omJson.current?.temperature_2m ?? omJson.hourly?.temperature_2m?.[currentHourIdx] ?? "Brak",
           rawApiType: typeof omJson.current?.temperature_2m === 'number' ? 'number (°C)' : 'undefined',
-          calculatedValue: `${omJson.current?.temperature_2m ?? "—"}°C (w UI zaokrąglona do ${Math.round(omJson.current?.temperature_2m ?? 0)}°)`,
-          calculationFormula: "Math.round(raw) na głównym ekranie, dokładna wartość w telemetrii",
-          uiComponentValue: `${Math.round(omJson.current?.temperature_2m ?? 0)}°`,
+          calculatedValue: `${omJson.current?.temperature_2m ?? "—"}°C (w UI dynamicznie kalibrowana ze stacją IMGW)`,
+          calculationFormula: "Dynamiczna kalibracja (Bias Correction): stała odchyłka IMGW dodawana do bieżącego profilu Open-Meteo",
+          uiComponentValue: `${omJson.current?.temperature_2m !== undefined ? Number(omJson.current.temperature_2m).toFixed(1) : "—"}°C`,
           uiRenderLocations: [
-            "MainWeather.tsx (Linia 1366: <Główny Termometr 3D>)",
-            "MainWeather.tsx (Linia 1603: <Pasek prognozy godzinowej>)",
+            "MainWeather.tsx (<Główny Termometr / Kafelek Temperatury>)",
+            "MainWeather.tsx (<Wykres i Pasek prognozy godzinowej 24h>)",
             "AdditionalWeatherParameters.tsx",
-            "WeatherSourceComparison.tsx (Linia 200: <Porównanie modeli ICON/ECMWF/IMGW>)"
+            "WeatherSourceComparison.tsx"
           ],
           status: (typeof omJson.current?.temperature_2m === 'number' ? 'ok' : 'warning') as 'ok' | 'warning'
         },
@@ -561,6 +492,14 @@ export default function App() {
         localStorage.setItem("aura_last_weather", JSON.stringify(data));
         localStorage.setItem("aura_last_sync_time", Date.now().toString());
         localStorage.setItem("aura_last_method", methodStr);
+
+        // If this was detected from GPS (not a manual city selection), persist the true GPS position
+        if (!isManual && isPolandCoordinates(lat, lng)) {
+          localStorage.setItem("aura_gps_coords", JSON.stringify({ lat, lng }));
+          if (data.city && isValidCityName(data.city)) {
+            localStorage.setItem("aura_gps_city", data.city);
+          }
+        }
       } catch (e) {
         console.warn("Could not save to localStorage", e);
       }
@@ -582,6 +521,9 @@ export default function App() {
           if (isValidCityName(updatedCity) && updatedCity !== data.city) {
             try {
               localStorage.setItem("aura_last_city", updatedCity);
+              if (!isManual && isPolandCoordinates(lat, lng)) {
+                localStorage.setItem("aura_gps_city", updatedCity);
+              }
             } catch (e) {}
             setWeatherData(prev => prev ? { ...prev, city: updatedCity } : prev);
           }

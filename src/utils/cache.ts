@@ -8,13 +8,13 @@ import { Capacitor } from '@capacitor/core';
 
 // TTL definitions in milliseconds
 export const CACHE_TTLS = {
-  CURRENT_WEATHER: 10 * 60 * 1000,   // 10 minutes
-  IMGW: 10 * 60 * 1000,              // 10 minutes
-  HOURLY_FORECAST: 30 * 60 * 1000,   // 30 minutes
+  CURRENT_WEATHER: 60 * 1000,        // 1 minute (60 s) - dynamiczna kalibracja i szybkie wczytywanie pomiarów IMGW
+  IMGW: 60 * 1000,                   // 1 minute (60 s) - natychmiastowe odświeżanie stacji telemetrycznych IMGW
+  HOURLY_FORECAST: 15 * 60 * 1000,   // 15 minutes
   FORECAST_16_DAYS: 60 * 60 * 1000,  // 60 minutes
-  AQI: 30 * 60 * 1000,               // 30 minutes
-  RADAR: 10 * 60 * 1000,             // 10 minutes
-  SATELLITE: 15 * 60 * 1000,         // 15 minutes
+  AQI: 20 * 60 * 1000,               // 20 minutes
+  RADAR: 5 * 60 * 1000,              // 5 minutes
+  SATELLITE: 10 * 60 * 1000,         // 10 minutes
 };
 
 interface CacheEntry<T> {

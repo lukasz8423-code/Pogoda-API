@@ -1,5 +1,6 @@
+import React from "react";
 import { motion, AnimatePresence } from "motion/react";
-import { X, Camera, Info, HelpCircle, MapPin } from "lucide-react";
+import { X, Smartphone, Sun, Camera, ShieldAlert, CheckCircle2, Info, Compass, HelpCircle, MapPin } from "lucide-react";
 
 export interface GeoDiagnosticInfo {
   lat: number;

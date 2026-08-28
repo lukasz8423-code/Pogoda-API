@@ -69,15 +69,15 @@ export interface HourlyForecast {
 export interface DailyForecast {
   time: string[];
   weather_code: number[];
-  temperature_2m_max: (number | null)[];
-  temperature_2m_min: (number | null)[];
-  apparent_temperature_max: (number | null)[];
-  apparent_temperature_min: (number | null)[];
-  uv_index_max: (number | null)[];
-  precipitation_sum: (number | null)[];
-  precipitation_probability_max: (number | null)[];
-  wind_speed_10m_max: (number | null)[];
-  wind_gusts_10m_max?: (number | null)[];
+  temperature_2m_max: number[];
+  temperature_2m_min: number[];
+  apparent_temperature_max: number[];
+  apparent_temperature_min: number[];
+  uv_index_max: number[];
+  precipitation_sum: number[];
+  precipitation_probability_max: number[];
+  wind_speed_10m_max: number[];
+  wind_gusts_10m_max?: number[];
   sunrise?: string[];
   sunset?: string[];
 }
