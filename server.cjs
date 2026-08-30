@@ -363,6 +363,7 @@ async function fetchUnifiedImgwStation(userLat, userLng) {
         rawPressure: synopMatch?.cisnienie ?? null,
         status: "Online - Telemetria IMGW-PIB",
         measurementTime: formattedTime,
+        rawMeasurementTime: timeRaw,
         lastPacket: formattedTime,
         isOfficial: true
       });
@@ -1256,9 +1257,9 @@ function getLocalAdviceFallback(city, current, daily, mode) {
     clothes = "Puch\xF3wka, czapka z pomponem i solidne zimowe buty";
     activities = "Zimowy spacer, sanki i gor\u0105ca czekolada";
   } else if (temp >= 25) {
-    baseAdvice = `Ale\u017C grzeje w ${city || "Twojej okolicy"} \u2013 a\u017C ${temp}\xB0C! S\u0142o\u0144ce daje po oczach, wi\u0119c idealny moment na zimny browarek lub lemoniad\u0119 w cieniu pod parasolem.`;
+    baseAdvice = `Ale\u017C grzeje w ${city || "Twojej okolicy"} \u2013 a\u017C ${temp}\xB0C! S\u0142o\u0144ce mocno dogrzewa, wi\u0119c to idealny moment na odpoczynek w cieniu i regularne nawadnianie.`;
     clothes = "Kr\xF3tkie spodenki, okulary przeciws\u0142oneczne i czapka z daszkiem";
-    activities = "Le\u017Cing nad wod\u0105, ch\u0142odne napoje i pe\u0142en relaks";
+    activities = "Wypoczynek w cieniu, ch\u0142odne napoje i regularne nawadnianie";
   } else if (temp >= 15) {
     baseAdvice = `Pogoda w ${city || "Twojej okolicy"} w sam raz na spacer, ${temp}\xB0C na liczniku. Ani za zimno, ani za gor\u0105co \u2013 grzech siedzie\u0107 w czterech \u015Bcianach!`;
     clothes = "Lekka bluza, t-shirt i wygodne buty";
