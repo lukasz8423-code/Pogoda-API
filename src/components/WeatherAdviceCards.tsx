@@ -44,20 +44,33 @@ export default React.memo(function WeatherAdviceCards({ data }: WeatherAdviceCar
   const generateAdvice = (): AdviceItem[] => {
     const list: AdviceItem[] = [];
 
+    // Wyznaczenie dynamicznego indeksu bieżącej godziny w profilu hourly
+    const now = Date.now();
+    const currentHourIdx = Array.isArray(hourly?.time) && hourly.time.length > 0
+      ? hourly.time.reduce((bestIdx: number, time: string, idx: number) => {
+          const diff = Math.abs(new Date(time).getTime() - now);
+          const bestDiff = Math.abs(new Date(hourly.time[bestIdx]).getTime() - now);
+          return diff < bestDiff ? idx : bestIdx;
+        }, 0)
+      : 0;
+
     // 1. Humorystyczny Smart Alercik Deszczowy (Chowanie gaci i cytrusów)
-    const currentPop = Array.isArray(hourly?.precipitation_probability) ? (hourly.precipitation_probability[0] ?? 0) : 0;
+    const currentPop = Array.isArray(hourly?.precipitation_probability) ? (hourly.precipitation_probability[currentHourIdx] ?? 0) : 0;
     const isRainingNow = (current?.precipitation ?? 0) > 0;
     
-    // Check if rain starts in next 4 hours
+    // Check if rain starts in next 4 hours (currentHourIdx + 1 .. currentHourIdx + 4)
     let rainSoonHour: number | null = null;
     let rainSoonProb = 0;
     if (hourly && hourly.precipitation_probability && hourly.time) {
-      for (let i = 1; i <= 4; i++) {
-        const prob = hourly.precipitation_probability[i] || 0;
-        if (prob >= 30) {
-          rainSoonHour = new Date(hourly.time[i]).getHours();
-          rainSoonProb = prob;
-          break;
+      for (let offset = 1; offset <= 4; offset++) {
+        const targetIdx = currentHourIdx + offset;
+        if (targetIdx < hourly.time.length && targetIdx < hourly.precipitation_probability.length) {
+          const prob = hourly.precipitation_probability[targetIdx] || 0;
+          if (prob >= 30) {
+            rainSoonHour = new Date(hourly.time[targetIdx]).getHours();
+            rainSoonProb = prob;
+            break;
+          }
         }
       }
     }
@@ -90,10 +103,13 @@ export default React.memo(function WeatherAdviceCards({ data }: WeatherAdviceCar
     const currentTemp = current.temperature_2m ?? 15;
     const roundTemp = Math.round(currentTemp);
     
-    // Check future temp in 2-3 hours
+    // Check future temp in 2-3 hours (currentHourIdx + 2 lub currentHourIdx + 3)
     let futureTemp: number | null = null;
-    if (hourly && hourly.temperature_2m) {
-      futureTemp = hourly.temperature_2m[2] || hourly.temperature_2m[3] || null;
+    if (hourly && hourly.temperature_2m && Array.isArray(hourly.temperature_2m)) {
+      const idxPlus2 = currentHourIdx + 2;
+      const idxPlus3 = currentHourIdx + 3;
+      futureTemp = (idxPlus2 < hourly.temperature_2m.length ? hourly.temperature_2m[idxPlus2] : null)
+        ?? (idxPlus3 < hourly.temperature_2m.length ? hourly.temperature_2m[idxPlus3] : null);
     }
 
     if (currentTemp >= 22) {

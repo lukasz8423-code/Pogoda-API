@@ -460,7 +460,8 @@ export default function App() {
         imgwStation: serverPayload?.imgwStation || null,
         hydrology: serverPayload?.hydrology || null,
         airQuality: serverPayload?.airQuality || undefined,
-        activeServers: serverPayload?.activeServers || ["Direct Client Fetch"]
+        activeServers: serverPayload?.activeServers || ["Direct Client Fetch"],
+        freshnessMetadata: serverPayload?.freshnessMetadata
       };
 
       if (isManual && cityNameOverride && isValidCityName(cityNameOverride)) {

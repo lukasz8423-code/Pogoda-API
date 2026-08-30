@@ -418,6 +418,7 @@ async function fetchUnifiedImgwStation(userLat: number, userLng: number) {
         rawPressure: synopMatch?.cisnienie ?? null,
         status: "Online - Telemetria IMGW-PIB",
         measurementTime: formattedTime,
+        rawMeasurementTime: timeRaw,
         lastPacket: formattedTime,
         isOfficial: true
       });
@@ -1493,9 +1494,9 @@ function getLocalAdviceFallback(city: string, current: any, daily: any, mode?: s
     clothes = "Puchówka, czapka z pomponem i solidne zimowe buty";
     activities = "Zimowy spacer, sanki i gorąca czekolada";
   } else if (temp >= 25) {
-    baseAdvice = `Ależ grzeje w ${city || 'Twojej okolicy'} – aż ${temp}°C! Słońce daje po oczach, więc idealny moment na zimny browarek lub lemoniadę w cieniu pod parasolem.`;
+    baseAdvice = `Ależ grzeje w ${city || 'Twojej okolicy'} – aż ${temp}°C! Słońce mocno dogrzewa, więc to idealny moment na odpoczynek w cieniu i regularne nawadnianie.`;
     clothes = "Krótkie spodenki, okulary przeciwsłoneczne i czapka z daszkiem";
-    activities = "Leżing nad wodą, chłodne napoje i pełen relaks";
+    activities = "Wypoczynek w cieniu, chłodne napoje i regularne nawadnianie";
   } else if (temp >= 15) {
     baseAdvice = `Pogoda w ${city || 'Twojej okolicy'} w sam raz na spacer, ${temp}°C na liczniku. Ani za zimno, ani za gorąco – grzech siedzieć w czterech ścianach!`;
     clothes = "Lekka bluza, t-shirt i wygodne buty";

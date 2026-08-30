@@ -94,6 +94,14 @@ export default function MeteoLcdConsole({
     ? times.findIndex((t: string) => t.startsWith(currentHourStr)) 
     : 0;
 
+  const todayDatePrefix = current?.time
+    ? current.time.slice(0, 10)
+    : now.toISOString().slice(0, 10);
+  const matchedDailyTodayIdx = Array.isArray(daily?.time)
+    ? daily.time.findIndex((t: string) => typeof t === 'string' && t.startsWith(todayDatePrefix))
+    : -1;
+  const todayDailyIndex = matchedDailyTodayIdx >= 0 ? matchedDailyTodayIdx : (daily?.time && daily.time.length > 1 ? 1 : 0);
+
   // Primary outdoor metrics - strictly synced with parent fused values
   const outdoorTemp = fusedTemp !== undefined ? fusedTemp : (hourly.temperature_2m?.[currentIdx] ?? current?.temperature_2m ?? null);
   const outdoorHumidity = fusedHumidity !== undefined ? fusedHumidity : (hourly.relative_humidity_2m?.[currentIdx] ?? current?.relative_humidity_2m ?? null);
@@ -105,7 +113,7 @@ export default function MeteoLcdConsole({
   const windDirLabel = getWindDirection(windDirDeg);
   const uvVal = fusedUvIndex !== undefined ? fusedUvIndex : (hourly.uv_index?.[currentIdx] ?? current?.uv_index ?? null);
   const rainRate = fusedPrecipitation !== undefined ? fusedPrecipitation : (hourly.precipitation?.[currentIdx] ?? current?.precipitation ?? 0);
-  const dailyRain = daily?.precipitation_sum?.[0] ?? 0;
+  const dailyRain = daily?.precipitation_sum?.[todayDailyIndex] ?? 0;
 
   // Solar radiation and Klux light intensity (strictly 0 at night)
   const isDay = current?.is_day === 1;
@@ -321,11 +329,11 @@ export default function MeteoLcdConsole({
                   <div className="text-right">
                     <div className="flex items-center text-xs font-bold text-amber-400">
                       <ArrowUp className="w-3 h-3 mr-0.5" />
-                      <span>{Math.round(daily?.temperature_2m_max?.[0] ?? outdoorTemp + 2)}°</span>
+                      <span>{Math.round(daily?.temperature_2m_max?.[todayDailyIndex] ?? outdoorTemp + 2)}°</span>
                     </div>
                     <div className="flex items-center text-xs font-bold text-blue-400">
                       <ArrowDown className="w-3 h-3 mr-0.5" />
-                      <span>{Math.round(daily?.temperature_2m_min?.[0] ?? outdoorTemp - 3)}°</span>
+                      <span>{Math.round(daily?.temperature_2m_min?.[todayDailyIndex] ?? outdoorTemp - 3)}°</span>
                     </div>
                   </div>
                 </div>

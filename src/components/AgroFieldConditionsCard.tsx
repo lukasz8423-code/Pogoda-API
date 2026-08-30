@@ -169,7 +169,7 @@ export default React.memo(function AgroFieldConditionsCard({ current: currentPro
                 </span>
               )}
             </div>
-            <h3 className="text-sm font-extrabold text-white">Warunki Polowe, Zwilżenie Liścia & Susza</h3>
+            <h3 className="text-sm font-extrabold text-white">Warunki polowe, zwilżenie liścia i susza</h3>
           </div>
         </div>
         

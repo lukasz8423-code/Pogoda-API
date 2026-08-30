@@ -175,6 +175,22 @@ export interface WeatherResponse {
     source: string;
   };
   lastUpdated?: string;
+  freshnessMetadata?: SourceFreshnessMetadata;
+}
+
+export interface SourceFreshnessMetadata {
+  omFetchTimestamp: number;
+  omAgeSeconds: number;
+  omStatus: 'FRESH' | 'STALE' | 'ERROR';
+  omForecastTimestamp?: string;
+  
+  imgwMeasurementTime?: string;
+  previousImgwMeasurementTime?: string;
+  imgwFetchTimestamp: number;
+  imgwReportAgeMinutes?: number | null;
+  imgwFreshnessStatus: 'FRESH' | 'WAITING_NEW_REPORT' | 'OUTDATED';
+  hasNewImgwReport?: boolean;
+  imgwReportChangeStatus?: 'NEW' | 'IDENTICAL' | 'OLDER' | 'INITIAL';
 }
 
 export interface AiRecommendation {

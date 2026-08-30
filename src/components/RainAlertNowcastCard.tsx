@@ -68,6 +68,15 @@ export default function RainAlertNowcastCard({ data }: RainAlertNowcastCardProps
   const isCurrentlyRaining = (current?.precipitation || 0) > 0.05 || (timelineItems[0]?.precipMm || 0) > 0.05 || stormInfo.isStorm;
   const upcomingRainItem = timelineItems.find((item, idx) => idx > 0 && (item.precipMm > 0.1 || item.probPercent >= 50));
 
+  console.log("[RAIN_ALERT_NOWCAST_CARD DEBUG]", {
+    now: new Date().toISOString(),
+    timelineLength: timelineItems.length,
+    timelineStart: timelineItems[0]?.timeLabel,
+    upcomingRainItem,
+    isCurrentlyRaining,
+    currentPrecip: current?.precipitation
+  });
+
   let alertBadgeText = "";
   let alertHeadline = "";
   let alertTheme: "dry" | "rainSoon" | "rainingNow" | "storm" = "dry";

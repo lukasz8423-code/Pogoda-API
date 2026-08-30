@@ -87,6 +87,7 @@ import CloudLayersModal from "./CloudLayersModal";
 import PwaDiagnosticModal, { GeoDiagnosticInfo } from "./PwaDiagnosticModal";
 import AdditionalWeatherParameters from "./AdditionalWeatherParameters";
 import ApiDataFlowDiagnosticsCard from "./ApiDataFlowDiagnosticsCard";
+import AuraDiagnosticCenter from "./AuraDiagnosticCenter";
 import NowcastPrecipitationAlert from "./NowcastPrecipitationAlert";
 import AgroFieldConditionsCard from "./AgroFieldConditionsCard";
 import HeatStressTomorrowCard from "./HeatStressTomorrowCard";
@@ -121,6 +122,14 @@ const gridVariants = {
 const cardVariants = {
   hidden: { opacity: 0, y: 10 },
   visible: { opacity: 1, y: 0 }
+};
+
+const formatUvDisplay = (val: number): string => {
+  if (!Number.isFinite(val)) return '—';
+  if (val > 0 && val < 1) {
+    return val.toFixed(1).replace('.', ',');
+  }
+  return Math.round(val).toString();
 };
 
 export default function MainWeather({ data, userLat, userLng, onRefresh, onBackToSearch, isRefreshing, onLocationSelected, geoDiagnostic }: MainWeatherProps) {
@@ -179,6 +188,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const [isForceSyncing, setIsForceSyncing] = useState(false);
   const [isFusionModalOpen, setIsFusionModalOpen] = useState(false);
   const [isCloudModalOpen, setIsCloudModalOpen] = useState(false);
+  const [isDiagnosticCenterModalOpen, setIsDiagnosticCenterModalOpen] = useState(false);
   const [phoneBarometer, setPhoneBarometer] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<'satellites' | 'agro' | 'diagnostics'>('satellites');
   const [selectedStationOverride, setSelectedStationOverride] = useState<{
@@ -448,6 +458,14 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   const finalHourIndex = getMatchedIndex();
   const currentIdx = finalHourIndex !== -1 ? finalHourIndex : 0;
 
+  console.log("[MAIN_WEATHER DEBUG]", {
+    now: new Date().toISOString(),
+    currentIdx,
+    currentTime: current?.time,
+    hourlyCurrentTime: hourly?.time?.[currentIdx],
+    firstTimes: hourly?.time?.slice(0, 8)
+  });
+
   const rawCurrentTemp = typeof current?.temperature_2m === 'number' && !isNaN(current.temperature_2m)
     ? current.temperature_2m
     : (typeof hourly?.temperature_2m?.[currentIdx] === 'number' && !isNaN(hourly.temperature_2m[currentIdx])
@@ -474,27 +492,83 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
       : 0);
 
   const currentPop = typeof hourly.precipitation_probability?.[currentIdx] === 'number' ? hourly.precipitation_probability[currentIdx] : null;
+
+  const todayDatePrefix = current?.time
+    ? current.time.slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+
+  // When past_days=1 is used, daily[0] is yesterday, daily[1] is today, daily[2] is tomorrow, daily[3] is day after tomorrow
+  const matchedDailyTodayIdx = Array.isArray(daily?.time)
+    ? daily.time.findIndex((t: string) => typeof t === 'string' && t.startsWith(todayDatePrefix))
+    : -1;
+  const todayDailyIndex = matchedDailyTodayIdx >= 0 ? matchedDailyTodayIdx : (daily.time.length > 1 ? 1 : 0);
+
+  // Algorytm hybrydowy: Szansa opadów dzisiaj
+  // 1. Podstawowe źródło: daily.precipitation_probability_max[todayDailyIndex]
+  // 2. Wyliczenie MAX z dzisiejszych godzin w hourly.precipitation_probability
+  // 3. Gdy daily = 0% lub null, a MAX z godzin > 0%, stosujemy MAX z godzin jako fallback.
+  const primaryDailyPopMax = typeof daily?.precipitation_probability_max?.[todayDailyIndex] === 'number'
+    ? daily.precipitation_probability_max[todayDailyIndex]
+    : null;
+
+  let hourlyMaxPopToday: number | null = null;
+  if (Array.isArray(hourly?.time) && Array.isArray(hourly?.precipitation_probability)) {
+    const todayHourlyPops = hourly.time
+      .map((t: string, i: number) => {
+        if (t.startsWith(todayDatePrefix)) {
+          const val = hourly.precipitation_probability[i];
+          return typeof val === 'number' && !isNaN(val) ? val : null;
+        }
+        return null;
+      })
+      .filter((v): v is number => v !== null);
+
+    if (todayHourlyPops.length > 0) {
+      hourlyMaxPopToday = Math.max(...todayHourlyPops);
+    }
+  }
+
+  let resolvedTodayPopMax: number | null = primaryDailyPopMax;
+  let popMaxSelectionSource = `daily.precipitation_probability_max[${todayDailyIndex}]`;
+
+  if ((primaryDailyPopMax === null || primaryDailyPopMax === 0) && hourlyMaxPopToday !== null && hourlyMaxPopToday > 0) {
+    resolvedTodayPopMax = hourlyMaxPopToday;
+    popMaxSelectionSource = 'MAX(hourly.precipitation_probability)';
+  }
   
-  // Current UV resolution: use current.uv_index; if 0 or missing, use hourly.uv_index for the current hour (do not zero with is_day)
+  // Current UV resolution: use current.uv_index; if missing, use hourly.uv_index for the current hour (0 is a valid reading)
   const rawCurrentUv = typeof current?.uv_index === 'number' ? current.uv_index : null;
   const rawHourlyUv = typeof hourly?.uv_index?.[currentIdx] === 'number' ? hourly.uv_index[currentIdx] : null;
-  const rawClearSkyUv = (current as any)?.uv_index_clear_sky ?? (hourly as any)?.uv_index_clear_sky?.[currentIdx] ?? null;
+  const rawClearSkyUv = typeof (current as any)?.uv_index_clear_sky === 'number'
+    ? (current as any).uv_index_clear_sky
+    : (typeof (hourly as any)?.uv_index_clear_sky?.[currentIdx] === 'number' ? (hourly as any).uv_index_clear_sky[currentIdx] : null);
 
   let resolvedCurrentUv: number | null = null;
-  if (rawCurrentUv !== null && rawCurrentUv > 0) {
+  if (rawCurrentUv !== null) {
     resolvedCurrentUv = rawCurrentUv;
-  } else if (rawHourlyUv !== null && rawHourlyUv > 0) {
+  } else if (rawHourlyUv !== null) {
     resolvedCurrentUv = rawHourlyUv;
-  } else if (rawClearSkyUv !== null && typeof rawClearSkyUv === 'number' && rawClearSkyUv > 0) {
+  } else if (rawClearSkyUv !== null) {
     resolvedCurrentUv = calculateAdjustedUvIndex(rawClearSkyUv, currentCloudCover);
   } else {
-    resolvedCurrentUv = rawCurrentUv ?? rawHourlyUv;
+    resolvedCurrentUv = null;
   }
   const currentUvIndex = resolvedCurrentUv;
 
+  console.log('[UV DIAGNOSTIC]', {
+    currentTime: current?.time,
+    currentIdx,
+    matchedHourlyTime: hourly?.time?.[currentIdx],
+    currentUv: current?.uv_index,
+    hourlyUv: hourly?.uv_index?.[currentIdx],
+    currentClearSkyUv: (current as any)?.uv_index_clear_sky,
+    hourlyClearSkyUv: (hourly as any)?.uv_index_clear_sky?.[currentIdx],
+    resolvedCurrentUv: currentUvIndex
+  });
+
   // Daily UV index max for today (used in the daily "Indeks UV" summary tile)
-  const rawDailyMaxUv = typeof daily?.uv_index_max?.[0] === 'number' ? daily.uv_index_max[0] : null;
-  const rawDailyClearSkyMaxUv = typeof (daily as any)?.uv_index_clear_sky_max?.[0] === 'number' ? (daily as any).uv_index_clear_sky_max[0] : null;
+  const rawDailyMaxUv = typeof daily?.uv_index_max?.[todayDailyIndex] === 'number' ? daily.uv_index_max[todayDailyIndex] : null;
+  const rawDailyClearSkyMaxUv = typeof (daily as any)?.uv_index_clear_sky_max?.[todayDailyIndex] === 'number' ? (daily as any).uv_index_clear_sky_max[todayDailyIndex] : null;
   const todayMaxUv = rawDailyMaxUv !== null
     ? rawDailyMaxUv
     : (rawDailyClearSkyMaxUv !== null
@@ -508,13 +582,13 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
     ? Math.round(current.wind_gusts_10m) 
     : (typeof hourly.wind_gusts_10m?.[currentIdx] === 'number' 
         ? Math.round(hourly.wind_gusts_10m[currentIdx]) 
-        : (typeof (daily as any)?.wind_gusts_10m_max?.[0] === 'number' 
-            ? Math.round((daily as any).wind_gusts_10m_max[0]) 
+        : (typeof (daily as any)?.wind_gusts_10m_max?.[todayDailyIndex] === 'number' 
+            ? Math.round((daily as any).wind_gusts_10m_max[todayDailyIndex]) 
             : (rawCurrentWindSpeed !== null ? Math.round(rawCurrentWindSpeed * 1.3) : null)));
-  const todayMaxGusts = typeof daily?.wind_gusts_10m_max?.[0] === 'number'
-    ? Math.round(daily.wind_gusts_10m_max[0])
-    : (typeof daily?.wind_speed_10m_max?.[0] === 'number'
-        ? Math.round(daily.wind_speed_10m_max[0] * 1.3)
+  const todayMaxGusts = typeof daily?.wind_gusts_10m_max?.[todayDailyIndex] === 'number'
+    ? Math.round(daily.wind_gusts_10m_max[todayDailyIndex])
+    : (typeof daily?.wind_speed_10m_max?.[todayDailyIndex] === 'number'
+        ? Math.round(daily.wind_speed_10m_max[todayDailyIndex] * 1.3)
         : currentWindGusts);
   const currentWindDirection = current?.wind_direction_10m ?? hourly.wind_direction_10m?.[currentIdx] ?? 0;
   const rawCurrentHumidity = typeof current?.relative_humidity_2m === 'number' ? Math.round(current.relative_humidity_2m) : (typeof hourly.relative_humidity_2m?.[currentIdx] === 'number' ? Math.round(hourly.relative_humidity_2m[currentIdx]) : null);
@@ -755,11 +829,11 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
           return Math.max(...dzisiejszeTempy);
         }
       }
-      return daily.temperature_2m_max?.[0] ?? currentTemp;
+      return daily.temperature_2m_max?.[todayDailyIndex] ?? currentTemp;
     } catch (e) {
-      return daily.temperature_2m_max?.[0] ?? currentTemp;
+      return daily.temperature_2m_max?.[todayDailyIndex] ?? currentTemp;
     }
-  }, [hourly, daily, currentTemp]);
+  }, [hourly, daily, currentTemp, todayDailyIndex]);
 
   const todayMinTemp = useMemo(() => {
     try {
@@ -777,11 +851,11 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
           return Math.min(...dzisiejszeTempy);
         }
       }
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
+      return daily.temperature_2m_min?.[todayDailyIndex] ?? currentTemp;
     } catch (e) {
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
+      return daily.temperature_2m_min?.[todayDailyIndex] ?? currentTemp;
     }
-  }, [hourly, daily, currentTemp]);
+  }, [hourly, daily, currentTemp, todayDailyIndex]);
 
   const upcomingNightTemp = useMemo(() => {
     try {
@@ -805,11 +879,11 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
           return Math.min(...nightTemps);
         }
       }
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
+      return daily.temperature_2m_min?.[todayDailyIndex] ?? currentTemp;
     } catch (e) {
-      return daily.temperature_2m_min?.[0] ?? currentTemp;
+      return daily.temperature_2m_min?.[todayDailyIndex] ?? currentTemp;
     }
-  }, [hourly, daily, currentTemp]);
+  }, [hourly, daily, currentTemp, todayDailyIndex]);
 
   // Early return ONLY after ALL hooks have been unconditionally called
   if (!weatherObj || !current) {
@@ -924,7 +998,8 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   if (currentUvIndex !== null && typeof currentUvIndex === 'number') {
     uvVal = Math.max(0, currentUvIndex);
     const uvOpis = getUvIndexDescription(uvVal);
-    displayUv = `${Math.round(uvVal)} — ${uvOpis}`;
+    displayUv = `${formatUvDisplay(uvVal)} — ${uvOpis}`;
+    console.log('[UV DISPLAY]', { raw: uvVal, displayed: formatUvDisplay(uvVal) });
   }
 
   // Recommendations logic
@@ -1015,7 +1090,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
   // Dynamic Background & Lighting gradient calculation based on weather code and time of day (day / sunset / night / rain / storm / snow)
   const currentHour = new Date().getHours();
   let isSunsetTime = false;
-  const rawSunset = daily?.sunset?.[0];
+  const rawSunset = daily?.sunset?.[todayDailyIndex];
   if (rawSunset && typeof rawSunset === 'string') {
     const sunsetDate = new Date(rawSunset);
     if (!isNaN(sunsetDate.getTime())) {
@@ -1171,8 +1246,18 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
             </button>
           </div>
 
-          {/* Right Controls: LCD, QR, Refresh */}
+          {/* Right Controls: Diagnostic Center, LCD, QR, Refresh */}
           <div className="flex items-center space-x-1.5 sm:space-x-2 shrink-0">
+            <button
+              onClick={() => setIsDiagnosticCenterModalOpen(true)}
+              className="p-2.5 sm:p-3 bg-purple-500/20 hover:bg-purple-500/30 border border-purple-400/40 rounded-2xl text-purple-200 hover:text-white transition-all active:scale-95 shadow-lg backdrop-blur-xl cursor-pointer flex items-center justify-center gap-1.5 font-bold text-xs"
+              title="Otwórz Centrum Diagnostyczne Aury"
+              id="btn-open-diagnostic-center"
+            >
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5 text-purple-300 shrink-0" />
+              <span className="hidden lg:inline font-mono">Diagnostyka</span>
+            </button>
+
             <button
               onClick={() => setShowLcdConsole(!showLcdConsole)}
               className={`p-2.5 sm:p-3 border rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-1.5 font-extrabold text-xs shadow-lg backdrop-blur-xl cursor-pointer ${
@@ -1614,7 +1699,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <Sun className="w-5 h-5 text-amber-400 drop-shadow" />
             </div>
             <span className="text-xl sm:text-2xl font-black text-white tracking-tight">
-              {uvVal !== null && !isNaN(uvVal) ? Math.round(uvVal) : '—'}
+              {uvVal !== null && !isNaN(uvVal) ? formatUvDisplay(uvVal) : '—'}
             </span>
             <span className="text-[11px] text-white/90 font-bold uppercase tracking-wider mt-1 drop-shadow-sm">
               Indeks UV
@@ -1651,7 +1736,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase">Prawd. opadów</span>
                 <strong className="text-white text-sm font-bold">
-                  {typeof daily?.precipitation_probability_max?.[0] === 'number' ? `${daily.precipitation_probability_max[0]}%` : '—'}
+                  {resolvedTodayPopMax !== null ? `${resolvedTodayPopMax}%` : '—'}
                 </strong>
               </div>
             </div>
@@ -1677,7 +1762,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
                 <strong className="text-white text-sm font-bold">
                   {todayMaxUv !== null && !isNaN(todayMaxUv) 
                     ? `${Math.round(todayMaxUv)} (${getUvIndexDescription(todayMaxUv)})` 
-                    : (uvVal !== null && !isNaN(uvVal) ? `${Math.round(uvVal)} (${getUvIndexDescription(uvVal)})` : '—')}
+                    : (uvVal !== null && !isNaN(uvVal) ? `${formatUvDisplay(uvVal)} (${getUvIndexDescription(uvVal)})` : '—')}
                 </strong>
               </div>
             </div>
@@ -1689,7 +1774,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase">Wschód słońca</span>
                 <strong className="text-white text-sm font-bold">
-                  {daily?.sunrise?.[0] && !isNaN(new Date(daily.sunrise[0]).getTime()) ? new Date(daily.sunrise[0]).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  {daily?.sunrise?.[todayDailyIndex] && !isNaN(new Date(daily.sunrise[todayDailyIndex]).getTime()) ? new Date(daily.sunrise[todayDailyIndex]).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '—'}
                 </strong>
               </div>
             </div>
@@ -1701,7 +1786,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               <div>
                 <span className="text-slate-400 block text-[10px] font-semibold uppercase">Zachód słońca</span>
                 <strong className="text-white text-sm font-bold">
-                  {daily?.sunset?.[0] && !isNaN(new Date(daily.sunset[0]).getTime()) ? new Date(daily.sunset[0]).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '—'}
+                  {daily?.sunset?.[todayDailyIndex] && !isNaN(new Date(daily.sunset[todayDailyIndex]).getTime()) ? new Date(daily.sunset[todayDailyIndex]).toLocaleTimeString('pl-PL', { hour: '2-digit', minute: '2-digit' }) : '—'}
                 </strong>
               </div>
             </div>
@@ -1948,19 +2033,20 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
               </button>
             </div>
             <div className="space-y-3">
-              {daily.time.slice(0, 3).map((day, idx) => {
-                const dayName = idx === 0 ? "Dziś" : idx === 1 ? "Jutro" : new Date(day).toLocaleDateString("pl-PL", { weekday: "long" }).replace(/^\w/, (c) => c.toUpperCase());
-                const dayWCode = daily.weather_code?.[idx] ?? 0;
+              {daily.time.slice(todayDailyIndex, todayDailyIndex + 3).map((day, offsetIdx) => {
+                const actualDailyIdx = todayDailyIndex + offsetIdx;
+                const dayName = offsetIdx === 0 ? "Dziś" : offsetIdx === 1 ? "Jutro" : new Date(day).toLocaleDateString("pl-PL", { weekday: "long" }).replace(/^\w/, (c) => c.toUpperCase());
+                const dayWCode = daily.weather_code?.[actualDailyIdx] ?? 0;
                 const dMeta = getWeatherMeta(dayWCode, true);
-                const isExpanded = expandedDayIndex === 'all' || expandedDayIndex === idx;
-                const dayPop = typeof daily.precipitation_probability_max?.[idx] === 'number' ? daily.precipitation_probability_max[idx] : 0;
-                const dayMaxT = typeof daily.temperature_2m_max?.[idx] === 'number' ? Math.round(daily.temperature_2m_max[idx]) : (currentTemp !== null ? Math.round(currentTemp) : '—');
-                const dayMinT = typeof daily.temperature_2m_min?.[idx] === 'number' ? Math.round(daily.temperature_2m_min[idx]) : (currentTemp !== null ? Math.round(currentTemp) : '—');
+                const isExpanded = expandedDayIndex === 'all' || expandedDayIndex === offsetIdx;
+                const dayPop = typeof daily.precipitation_probability_max?.[actualDailyIdx] === 'number' ? daily.precipitation_probability_max[actualDailyIdx] : 0;
+                const dayMaxT = typeof daily.temperature_2m_max?.[actualDailyIdx] === 'number' ? Math.round(daily.temperature_2m_max[actualDailyIdx]) : (currentTemp !== null ? Math.round(currentTemp) : '—');
+                const dayMinT = typeof daily.temperature_2m_min?.[actualDailyIdx] === 'number' ? Math.round(daily.temperature_2m_min[actualDailyIdx]) : (currentTemp !== null ? Math.round(currentTemp) : '—');
                 
                 return (
                   <div key={day} className="flex flex-col">
                     <div 
-                      onClick={() => setExpandedDayIndex(expandedDayIndex === idx ? null : idx)}
+                      onClick={() => setExpandedDayIndex(expandedDayIndex === offsetIdx ? null : offsetIdx)}
                       className={`flex items-center justify-between p-4 sm:p-5 border rounded-3xl transition-all cursor-pointer group active:scale-[0.99] backdrop-blur-2xl shadow-lg ${
                         isExpanded 
                           ? 'bg-gradient-to-r from-blue-600/30 via-cyan-600/20 to-blue-900/30 border-blue-400/50 shadow-blue-500/20 ring-1 ring-blue-400/40' 
@@ -2157,7 +2243,7 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
                     }}
                   />
                   <HeatStressTomorrowCard hourly={hourly} daily={daily} />
-                  <NowcastPrecipitationAlert hourly={hourly} />
+                  <NowcastPrecipitationAlert hourly={hourly} startIndex={currentIdx} />
                 </motion.div>
               )}
 
@@ -2170,20 +2256,12 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
                   transition={{ duration: 0.2 }}
                   className="space-y-6"
                 >
-                  <ApiDataFlowDiagnosticsCard 
+                  <AuraDiagnosticCenter 
                     data={data}
                     userLat={userLat}
                     userLng={userLng}
-                  />
-
-                  <DeviceSensorsCard 
-                    currentTemp={currentTemp}
-                    currentPressure={currentPressure || 1029}
-                    userLat={userLat}
-                    userLng={userLng}
-                    locationName={city}
-                    onGpsUpdate={(lat, lng) => onLocationSelected?.(lat, lng)}
-                    onLuxUpdate={(lux) => setSensorLux(lux)}
+                    geoDiagnostic={geoDiagnostic}
+                    onRefresh={onRefresh}
                   />
 
                   {data.airQuality && (
@@ -2293,6 +2371,16 @@ export default function MainWeather({ data, userLat, userLng, onRefresh, onBackT
         lowCloud={lowCloud}
         midCloud={midCloud}
         highCloud={highCloud}
+      />
+
+      <AuraDiagnosticCenter 
+        data={data}
+        userLat={userLat}
+        userLng={userLng}
+        geoDiagnostic={geoDiagnostic}
+        onRefresh={onRefresh}
+        isOpenAsModal={isDiagnosticCenterModalOpen}
+        onCloseModal={() => setIsDiagnosticCenterModalOpen(false)}
       />
 
       <WeatherAlertsToast data={data} />

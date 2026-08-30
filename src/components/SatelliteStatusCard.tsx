@@ -155,7 +155,7 @@ export default function SatelliteStatusCard({
           id="btn-ping-satellites"
         >
           <RefreshCw className={`w-3.5 h-3.5 text-purple-400 ${pinging ? "animate-spin" : ""}`} />
-          <span>{pinging ? "Pinging orbit..." : "Test sygnału"}</span>
+          <span>{pinging ? "Sprawdzanie łączności..." : "Test sygnału"}</span>
         </button>
       </div>
 

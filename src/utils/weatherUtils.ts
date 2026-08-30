@@ -246,6 +246,14 @@ export interface CalibratedTemperatureDetails {
   delayMinutes: number;
   stationName: string | null;
   statusLabel: string;
+
+  // Dynamic Decay Engine diagnostics (FAZA 6)
+  calibrationMode?: 'FRESH_IMGW' | 'DYNAMIC_MODEL_WITH_BIAS' | 'DECAYING_BIAS' | 'MODEL_ONLY';
+  originalBias?: number;
+  biasWeight?: number;
+  effectiveBias?: number;
+  rawOpenMeteoTemp?: number | null;
+  imgwTemp?: number | null;
 }
 
 /**
@@ -335,6 +343,7 @@ export function getCalibratedTemperatureDetails(
   const rawOm = typeof currentOpenMeteoTemp === 'number' && !isNaN(currentOpenMeteoTemp) ? currentOpenMeteoTemp : null;
   const hourStr = formatMeasurementHour(measurementTime);
   const delayCheck = checkImgwDelay(measurementTime);
+  const minutesOld = delayCheck.minutesOld;
 
   // Fallback if IMGW reading is missing
   if (imgwTemp === null) {
@@ -347,76 +356,104 @@ export function getCalibratedTemperatureDetails(
       isDelayed: false,
       delayMinutes: 0,
       stationName: null,
-      statusLabel: "Model Open-Meteo (Best Match)"
+      statusLabel: "Model Open-Meteo (Best Match)",
+      calibrationMode: 'MODEL_ONLY',
+      originalBias: 0,
+      biasWeight: 0,
+      effectiveBias: 0,
+      rawOpenMeteoTemp: rawOm !== null ? Number(rawOm.toFixed(1)) : null,
+      imgwTemp: null
     };
   }
 
   // Find Open-Meteo temp at the time of IMGW measurement
   const omAtMeasurement = findMatchingHourlyTemp(measurementTime, hourlyTimes, hourlyTemps, rawOm);
 
-  // Obliczenie odchyłki (bias) między pomiarem stacji a modelem z tamtej godziny
-  const rawModelBias = omAtMeasurement !== null ? (imgwTemp - omAtMeasurement) : 0;
+  // Reference Open-Meteo temp for bias calculation: prefer matching hourly, fallback to rawOm
+  const refOmForBias = omAtMeasurement !== null ? omAtMeasurement : rawOm;
+  const originalBias = refOmForBias !== null ? (imgwTemp - refOmForBias) : 0;
 
-  const { nextUpdateStr, isPastExpectedTime } = getExpectedNextUpdateTime(measurementTime);
+  const { nextUpdateStr } = getExpectedNextUpdateTime(measurementTime);
 
-  // 1. Świeży odczyt (<= 30 min):
-  // Temperatura na ekranie to DOKŁADNIE odczyt ze stacji IMGW (ground truth)
-  if (!delayCheck.isDelayed) {
-    const label = hourStr 
-      ? (nextUpdateStr 
+  // DECAY ENGINE STAGES (FAZA 6):
+  // A) FRESH_IMGW (< 30 min)
+  // B) DYNAMIC_MODEL_WITH_BIAS (30 - 75 min)
+  // C) DECAYING_BIAS (75 - 120 min)
+  // D) MODEL_ONLY (> 120 min)
+
+  let calibrationMode: 'FRESH_IMGW' | 'DYNAMIC_MODEL_WITH_BIAS' | 'DECAYING_BIAS' | 'MODEL_ONLY';
+  let biasWeight = 0;
+  let isCalibrated = false;
+  let isDelayed = false;
+  let statusLabel = '';
+
+  if (minutesOld < 30) {
+    calibrationMode = 'FRESH_IMGW';
+    biasWeight = 1.0;
+    isCalibrated = true;
+    isDelayed = false;
+
+    statusLabel = hourStr
+      ? (nextUpdateStr
           ? `Skalibrowano ze stacją IMGW (Odczyt z ${hourStr} • kolejny ~${nextUpdateStr})`
           : `Skalibrowano ze stacją IMGW (Odczyt z ${hourStr})`)
-      : (nextUpdateStr 
-          ? `Skalibrowano ze stacją IMGW (kolejny ~${nextUpdateStr})`
-          : "Skalibrowano ze stacją IMGW");
+      : "Skalibrowano ze stacją IMGW (świeży pomiar)";
+  } else if (minutesOld <= 75) {
+    calibrationMode = 'DYNAMIC_MODEL_WITH_BIAS';
+    biasWeight = 1.0;
+    isCalibrated = true;
+    isDelayed = true;
 
-    return {
-      calibratedTemp: Number(imgwTemp.toFixed(1)),
-      bias: 0,
-      openMeteoTempAtMeasurement: omAtMeasurement !== null ? Number(omAtMeasurement.toFixed(1)) : null,
-      measurementHourStr: hourStr || null,
-      expectedNextUpdateStr: nextUpdateStr || null,
-      isCalibrated: true,
-      isDelayed: false,
-      delayMinutes: delayCheck.minutesOld,
-      stationName,
-      statusLabel: label
-    };
-  }
+    const formattedBias = `${originalBias >= 0 ? '+' : ''}${originalBias.toFixed(1)}°C`;
+    statusLabel = `Open-Meteo + korekta IMGW (${formattedBias})`;
+  } else if (minutesOld <= 120) {
+    calibrationMode = 'DECAYING_BIAS';
+    // Linear decay from 75 min (weight 1.0) to 120 min (weight 0.0)
+    biasWeight = Math.max(0, Math.min(1, (120 - minutesOld) / (120 - 75)));
+    isCalibrated = true;
+    isDelayed = true;
 
-  // 2. Opóźnienie stacji (> 30 min):
-  // Zamiast dodawać stały bias do dynamicznego modelu, stosujemy łagodne tłumienie (damping):
-  // temperatura wyjściowa ze stacji IMGW odchyla się maksymalnie o +/- 0.3°C w stronę trendu Open-Meteo
-  const omTrend = (rawOm !== null && omAtMeasurement !== null)
-    ? (rawOm - omAtMeasurement)
-    : (rawOm !== null ? (rawOm - imgwTemp) : 0);
-
-  // Damping: 30% trendu z Open-Meteo, z twardym limitem +/- 0.3°C od ostatniego odczytu stacji
-  const dampedShift = Math.max(-0.3, Math.min(0.3, omTrend * 0.3));
-  const dampedTemp = imgwTemp + dampedShift;
-
-  let delayStatusLabel: string;
-  if (isPastExpectedTime) {
-    delayStatusLabel = hourStr
-      ? `Stacja IMGW: Odczyt z ${hourStr} (opóźnienie serwera API • ponawianie...)`
-      : "Stacja IMGW (opóźnienie serwera API • ponawianie...)";
+    const effBias = originalBias * biasWeight;
+    const formattedBias = `${effBias >= 0 ? '+' : ''}${effBias.toFixed(1)}°C`;
+    statusLabel = `Open-Meteo + wygaszana korekta IMGW (${formattedBias})`;
   } else {
-    delayStatusLabel = hourStr
-      ? `Stacja IMGW: Odczyt z ${hourStr} (spodziewany odczyt ~${nextUpdateStr})`
-      : (nextUpdateStr ? `Stacja IMGW (spodziewany odczyt ~${nextUpdateStr})` : "Stacja IMGW (Oczekuje na aktualizację)");
+    calibrationMode = 'MODEL_ONLY';
+    biasWeight = 0.0;
+    isCalibrated = false;
+    isDelayed = true;
+
+    statusLabel = "Model Open-Meteo (korekta IMGW wygasła)";
   }
-  
+
+  const effectiveBias = originalBias * biasWeight;
+
+  // Final calculated temperature:
+  // Base is always current live Open-Meteo temperature (rawOm) + effectiveBias,
+  // preventing temperature freezing on old IMGW reports.
+  let calculatedTemp: number | null = null;
+  if (rawOm !== null) {
+    calculatedTemp = rawOm + effectiveBias;
+  } else {
+    calculatedTemp = imgwTemp;
+  }
+
   return {
-    calibratedTemp: Number(dampedTemp.toFixed(1)),
-    bias: Number(dampedShift.toFixed(2)),
+    calibratedTemp: calculatedTemp !== null ? Number(calculatedTemp.toFixed(1)) : null,
+    bias: Number(effectiveBias.toFixed(1)),
     openMeteoTempAtMeasurement: omAtMeasurement !== null ? Number(omAtMeasurement.toFixed(1)) : null,
     measurementHourStr: hourStr || null,
     expectedNextUpdateStr: nextUpdateStr || null,
-    isCalibrated: true,
-    isDelayed: true,
-    delayMinutes: delayCheck.minutesOld,
+    isCalibrated,
+    isDelayed,
+    delayMinutes: minutesOld,
     stationName,
-    statusLabel: delayStatusLabel
+    statusLabel,
+    calibrationMode,
+    originalBias: Number(originalBias.toFixed(2)),
+    biasWeight: Number(biasWeight.toFixed(2)),
+    effectiveBias: Number(effectiveBias.toFixed(2)),
+    rawOpenMeteoTemp: rawOm !== null ? Number(rawOm.toFixed(1)) : null,
+    imgwTemp: Number(imgwTemp.toFixed(1))
   };
 }
 
@@ -499,7 +536,7 @@ export function getWeatherMeta(
     if (isSunshower) {
       const isHeavy = precipitation > 2.5;
       return {
-        text: isHeavy ? "Intensywny deszcz ze słońcem 🌈" : "Słoneczny deszcz (Przelotny opad) 🌦️",
+        text: isHeavy ? "Intensywny deszcz ze słońcem 🌈" : "Przelotny deszcz i słońce 🌦️",
         icon: CloudSun,
         emoji: "🌦️",
         gradientClass: "from-slate-950 via-slate-900 to-amber-950/30",
@@ -682,7 +719,7 @@ export function getWeatherMeta(
         };
       case 75: // Heavy snow fall
         return {
-          text: "Ulewny śnieg",
+          text: "Obfity śnieg",
           icon: Snowflake,
           emoji: "❄️",
           gradientClass: "from-slate-950 via-slate-900 to-sky-950/20",
@@ -1540,7 +1577,7 @@ export function getDriverRoadConditions(
     return {
       type: "crosswind",
       title: "Ostrzeżenie przed bocznym wiatrem",
-      message: "Uważaj na otwartych trasach i przy wyprzedzaniu ciężarówek – potrafi mocno bujnąć autem!",
+      message: "Uważaj na otwartych odcinkach dróg i przy wyprzedzaniu ciężarówek – silny wiatr może mocno zachwiać pojazdem!",
       badge: "BOCZNY WIATR",
       severity: "warning",
       highlight: `Porywy do ${Math.round(curGusts)} km/h`,
@@ -1569,7 +1606,7 @@ export function getDriverRoadConditions(
     return {
       type: "glare",
       title: "Niskie, oślepiające słońce",
-      message: "Będzie walić prosto w szybę i oślepiać na trasie zachodniej, przygotuj okulary przeciwsłoneczne!",
+      message: "Nisko świecące słońce może mocno oślepiać na trasie zachodniej. Przygotuj okulary przeciwsłoneczne!",
       badge: "OŚLEPIAJĄCE SŁOŃCE",
       severity: "warning",
       iconType: "sun"
@@ -1716,7 +1753,7 @@ export function getBestWalkTimeWindow(
 
   let explanation = "";
   if (startGusts > 35 && winGust <= 32) {
-    explanation = `Wiatr spadnie z ${Math.round(startGusts)} na ~${winGust} km/h, słońce już tak nie praży i brak deszczu.`;
+    explanation = `Wiatr osłabnie z ${Math.round(startGusts)} do ~${winGust} km/h, słońce świeci łagodniej i brak opadów.`;
   } else if (startPrecip > 0.2 && winPrecip < 0.1) {
     explanation = `Przerwa w opadach i suchy chodnik – idealna chwila na spacer przed kolejną falą deszczu.`;
   } else if (startTemp >= 27 && winTemp <= 23) {

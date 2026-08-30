@@ -1,22 +1,25 @@
 import { getDistanceKm } from "./distance";
 import { smartFetch } from "./fetch";
 import { cachedFetch, CACHE_TTLS } from "./cache";
+import { Capacitor } from '@capacitor/core';
 
 export async function fetchNearestGiosAirQuality(userLat: number, userLng: number) {
   const cacheKey = `aqi_${userLat.toFixed(2)}_${userLng.toFixed(2)}`;
   return cachedFetch(cacheKey, async () => {
     try {
       // First try backend Express proxy route on Web
-      try {
-        const apiRes = await fetch(`/api/gios/air-quality?lat=${userLat}&lng=${userLng}`);
-        if (apiRes.ok) {
-          const apiData = await apiRes.json();
-          if (apiData && (apiData.aqi || apiData.stationName)) {
-            return apiData;
+      if (!Capacitor.isNativePlatform() && window.location.protocol !== 'file:') {
+        try {
+          const apiRes = await fetch(`/api/gios/air-quality?lat=${userLat}&lng=${userLng}`);
+          if (apiRes.ok) {
+            const apiData = await apiRes.json();
+            if (apiData && (apiData.aqi || apiData.stationName)) {
+              return apiData;
+            }
           }
+        } catch (proxyErr) {
+          console.warn("Backend GIOŚ proxy call skipped/failed, trying direct fetch:", proxyErr);
         }
-      } catch (proxyErr) {
-        console.warn("Backend GIOŚ proxy call skipped/failed, trying direct fetch:", proxyErr);
       }
 
       // 1. Find all stations

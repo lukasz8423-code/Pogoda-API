@@ -129,7 +129,7 @@ export default function WeatherSourceComparison({
             humidity: c.humidity,
             windSpeed: c.windSpeed,
             pressure: c.pressure,
-            status: "Online - Telemetria IMGW-PIB",
+            status: "Aktywna – telemetria IMGW-PIB",
             distanceKm: c.distanceKm,
             distance: c.distance || `${c.distanceKm} km`,
             soilTemp: c.groundTemp ?? null,
@@ -153,7 +153,7 @@ export default function WeatherSourceComparison({
             humidity: imgwStation.humidity,
             windSpeed: imgwStation.windSpeed,
             pressure: imgwStation.pressure,
-            status: imgwStation.status || "Online - Telemetria IMGW-PIB",
+            status: imgwStation.status || "Aktywna – telemetria IMGW-PIB",
             distanceKm: typeof imgwStation.distanceKm === 'number' ? imgwStation.distanceKm : (parseFloat(imgwStation.distance) || 0),
             distance: imgwStation.distance || "0.0 km",
             soilTemp: imgwStation.groundTemp ?? null,
@@ -189,7 +189,7 @@ export default function WeatherSourceComparison({
           humidity: imgwStation.humidity,
           windSpeed: imgwStation.windSpeed,
           pressure: imgwStation.pressure,
-          status: "Online - Pomiary IMGW-PIB",
+          status: "Dostępna – pomiary IMGW-PIB",
           distance: imgwStation.distance || "0.0 km",
           distanceKm: typeof imgwStation.distanceKm === 'number' ? imgwStation.distanceKm : (parseFloat(imgwStation.distance) || 0),
           soilTemp: null,
@@ -227,7 +227,7 @@ export default function WeatherSourceComparison({
     solarRadiation: null,
     hasSoilSensor: false,
     hasSolarSensor: false,
-    status: "Online - Pomiary IMGW-PIB"
+    status: "Dostępna – pomiary IMGW-PIB"
   };
 
   const handleSendReport = (type: string) => {
@@ -242,7 +242,7 @@ export default function WeatherSourceComparison({
     { key: "arome", name: "AROME 1.3km", role: "Model wysokorozdzielczy IMGW / Météo-France", weight: "45%", color: "from-blue-600 to-indigo-600", tempOffset: 0.1 },
     { key: "icon_d2", name: "ICON-D2 2.2km", role: "Niemiecka Służba Pogodowa DWD", weight: "30%", color: "from-emerald-600 to-teal-600", tempOffset: -0.2 },
     { key: "ecmwf", name: "ECMWF HRES", role: "Europejskie Centrum Prognoz Średnioterminowych", weight: "15%", color: "from-amber-600 to-orange-600", tempOffset: 0.3 },
-    { key: "gfs", name: "NOAA GFS", role: "Global Forecast System USA", weight: "10%", color: "from-purple-600 to-pink-600", tempOffset: -0.4 }
+    { key: "gfs", name: "NOAA GFS", role: "Globalny model prognostyczny USA (NOAA)", weight: "10%", color: "from-purple-600 to-pink-600", tempOffset: -0.4 }
   ];
 
   return (
@@ -399,7 +399,7 @@ export default function WeatherSourceComparison({
                 <div className="bg-slate-900/60 p-3 rounded-xl border border-emerald-500/30">
                   <div className="text-[10px] text-emerald-400 flex items-center space-x-1 font-semibold">
                     <Gauge className="w-3.5 h-3.5" />
-                    <span>Ciśnienie atm.</span>
+                    <span>Ciśnienie atmosferyczne</span>
                   </div>
                   <div className="text-sm sm:text-base font-bold text-white mt-1">
                     {activeStation.pressure !== null && activeStation.pressure !== undefined 

@@ -39,13 +39,25 @@ export default function NowcastPrecipitationAlert({ hourly, startIndex = 0 }: No
 
   const firstRainHour = nextHours.find((h, i) => i > 0 && (h.precip > 0.1 || h.pop >= 40));
 
+  const rainAbsoluteIndex = firstRainHour ? startIndex + firstRainHour.index : null;
+  console.log("[NOWCAST DEBUG]", {
+    now: new Date().toISOString(),
+    startIndex,
+    currentTime: hourly.time[startIndex] ?? null,
+    firstTimes: hourly.time.slice(0, 8),
+    rainIndex: rainAbsoluteIndex,
+    rainTime: rainAbsoluteIndex !== null ? (hourly.time[rainAbsoluteIndex] ?? null) : null,
+    rain: rainAbsoluteIndex !== null ? (hourly.precipitation?.[rainAbsoluteIndex] ?? null) : null,
+    pop: rainAbsoluteIndex !== null ? (hourly.precipitation_probability?.[rainAbsoluteIndex] ?? null) : null
+  });
+
   if (currentPrecip > 0.2 || currentPop >= 70) {
     headlineVerdict = `Trwa opad deszczu (ok. ${currentPrecip.toFixed(1)} mm/h)`;
     const dryHour = nextHours.find((h, i) => i > 0 && h.precip < 0.1 && h.pop < 30);
     if (dryHour) {
-      subText = `Przewidywane ustanie opadów za około ${dryHour.index * 60 - 15}- ${dryHour.index * 60} minut (${dryHour.timeLabel}).`;
+      subText = `Przewidywane ustanie opadów za około ${dryHour.index * 60 - 15}–${dryHour.index * 60} minut (${dryHour.timeLabel}).`;
     } else {
-      subText = `Opad utrzyma się przez najbliższe 2-3 godziny. Zalecany parasol.`;
+      subText = `Opad utrzyma się przez najbliższe 2–3 godziny. Zalecany parasol.`;
     }
     statusBg = "bg-blue-950/40";
     borderClass = "border-cyan-500/40";
